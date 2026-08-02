@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Holder Quick Saver</title>
+  <style>
+    :root {
+      --bg: #0a0c14;
+      --card-bg: #121524;
+      --accent: #6366f1;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body {
+      width: 320px;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #ec4899);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .title { font-size: 15px; font-weight: 700; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .status {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 8px;
+    }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">⚡</div>
+    <div class="title">Holder Quick Saver</div>
+  </div>
+
+  <form id="saveForm">
+    <div class="form-group">
+      <label for="title">Title</label>
+      <input type="text" id="title" required placeholder="Loading tab title...">
+    </div>
+
+    <div class="form-group">
+      <label for="url">URL / Media Link</label>
+      <input type="url" id="url" required placeholder="https://...">
+    </div>
+
+    <div class="form-group">
+      <label for="folderId">Target Folder</label>
+      <select id="folderId">
+        <option value="">📁 Uncategorized</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="tags">Tags (comma separated)</label>
+      <input type="text" id="tags" placeholder="youtube, brand, design">
+    </div>
+
+    <div class="form-group">
+      <label for="notes">Notes / Comments</label>
+      <textarea id="notes" rows="2" placeholder="Add quick notes..."></textarea>
+    </div>
+
+    <button type="submit" class="btn" id="saveBtn">Save to Vault</button>
+    <div id="status" class="status"></div>
+  </form>
+
+  <script src="popup.js"></script>
+</body>
+</html>
