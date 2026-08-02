@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { X, Lock, Folder } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 const EMOJI_OPTIONS = ['💼', '🔒', '🎥', '🌐', '🚀', '💡', '🎨', '📚', '⚡', '💻', '🔑', '🎯'];
 const COLOR_OPTIONS = ['#6366f1', '#ec4899', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'];
