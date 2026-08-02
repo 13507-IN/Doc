@@ -8,7 +8,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 const EMOJI_OPTIONS = ['💼', '🔒', '🎥', '🌐', '🚀', '💡', '🎨', '📚', '⚡', '💻', '🔑', '🎯'];
 const COLOR_OPTIONS = ['#6366f1', '#ec4899', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
-export default function AddFolderModal({ isOpen, onClose, onFolderCreated }) {
+export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('💼');
@@ -28,6 +28,8 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated }) {
         icon,
         color,
         isPrivate
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (res.data.success) {

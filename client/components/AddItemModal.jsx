@@ -8,7 +8,7 @@ import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId }) {
+export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, token }) {
   const [activeTab, setActiveTab] = useState('youtube'); // youtube | image | link | note
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -62,7 +62,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       formData.append('image', file);
 
       const res = await axios.post(`${API_BASE}/items/upload-image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (res.data.success) {
@@ -95,7 +98,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         metadata
       };
 
-      const res = await axios.post(`${API_BASE}/items`, payload);
+      const res = await axios.post(`${API_BASE}/items`, payload, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
       if (res.data.success) {
         onItemAdded(res.data.item);
         handleReset();

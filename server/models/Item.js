@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const itemSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   title: {
     type: String,
     required: true,
@@ -63,7 +68,6 @@ itemSchema.pre('save', function(next) {
   next();
 });
 
-// Text index for search
-itemSchema.index({ title: 'text', content: 'text', tags: 'text', url: 'text' });
+itemSchema.index({ userId: 1, title: 'text', content: 'text', tags: 'text', url: 'text' });
 
 module.exports = mongoose.model('Item', itemSchema);

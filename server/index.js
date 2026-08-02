@@ -51,24 +51,6 @@ async function connectDB() {
       console.error('❌ Failed to start In-Memory MongoDB:', memErr.message);
     }
   }
-
-  // Seed default folders if empty
-  try {
-    const Folder = require('./models/Folder');
-    const folderCount = await Folder.countDocuments();
-    if (folderCount === 0) {
-      console.log('🌱 Seeding initial folders...');
-      await Folder.insertMany([
-        { name: 'Brand Assets', description: 'Logos, colors, brand guidelines, key media links', icon: '💼', color: '#6366f1' },
-        { name: 'Private & Important', description: 'Vault for highly confidential notes, codes & credentials', icon: '🔒', color: '#ec4899', isPrivate: true },
-        { name: 'YouTube & Learning', description: 'Saved YouTube videos, tutorials, tech lectures', icon: '🎥', color: '#ef4444' },
-        { name: 'Web Bookmarks', description: 'Important websites, articles, docs', icon: '🌐', color: '#10b981' }
-      ]);
-      console.log('✅ Default folders seeded successfully.');
-    }
-  } catch (seedErr) {
-    console.error('Error seeding default folders:', seedErr.message);
-  }
 }
 
 connectDB().then(() => {

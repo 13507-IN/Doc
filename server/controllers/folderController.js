@@ -1,22 +1,23 @@
 const Folder = require('../models/Folder');
 const Item = require('../models/Item');
 
-// Get all folders with item counts
+// Get all folders for the authenticated user
 exports.getFolders = async (req, res) => {
   try {
-    const folders = await Folder.find().sort({ createdAt: -1 });
+    const userId = req.user.id;
+    const folders = await Folder.find({ userId }).sort({ createdAt: -1 });
     
     // Get item counts for each folder
     const foldersWithCount = await Promise.all(folders.map(async (folder) => {
-      const itemCount = await Item.countDocuments({ folderId: folder._id });
+      const itemCount = await Item.countDocuments({ userId, folderId: folder._id });
       return {
         ...folder.toObject(),
         itemCount
       };
     }));
 
-    // Get count of uncategorized items (folderId: null)
-    const uncategorizedCount = await Item.countDocuments({ folderId: null });
+    // Get count of uncategorized items
+    const uncategorizedCount = await Item.countDocuments({ userId, folderId: null });
 
     res.json({
       success: true,
@@ -28,9 +29,10 @@ exports.getFolders = async (req, res) => {
   }
 };
 
-// Create a new folder
+// Create a new folder for the authenticated user
 exports.createFolder = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { name, description, icon, color, isPrivate } = req.body;
 
     if (!name) {
@@ -38,6 +40,7 @@ exports.createFolder = async (req, res) => {
     }
 
     const folder = new Folder({
+      userId,
       name,
       description: description || '',
       icon: icon || '📁',
@@ -55,11 +58,12 @@ exports.createFolder = async (req, res) => {
 // Update folder
 exports.updateFolder = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
     const { name, description, icon, color, isPrivate } = req.body;
 
-    const folder = await Folder.findByIdAndUpdate(
-      id,
+    const folder = await Folder.findOneAndUpdate(
+      { _id: id, userId },
       { name, description, icon, color, isPrivate },
       { new: true, runValidators: true }
     );
@@ -74,22 +78,22 @@ exports.updateFolder = async (req, res) => {
   }
 };
 
-// Delete folder (optionally delete or unassign items inside)
+// Delete folder
 exports.deleteFolder = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
     const { deleteItems } = req.query;
 
-    const folder = await Folder.findByIdAndDelete(id);
+    const folder = await Folder.findOneAndDelete({ _id: id, userId });
     if (!folder) {
       return res.status(404).json({ success: false, message: 'Folder not found' });
     }
 
     if (deleteItems === 'true') {
-      await Item.deleteMany({ folderId: id });
+      await Item.deleteMany({ userId, folderId: id });
     } else {
-      // Unassign folderId from items
-      await Item.updateMany({ folderId: id }, { $set: { folderId: null } });
+      await Item.updateMany({ userId, folderId: id }, { $set: { folderId: null } });
     }
 
     res.json({ success: true, message: 'Folder deleted successfully' });

@@ -14,7 +14,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
     body {
-      width: 320px;
+      width: 330px;
       padding: 16px;
       background: var(--bg);
       color: var(--text);
@@ -22,10 +22,15 @@
     .header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
       margin-bottom: 14px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .logo {
       width: 28px;
@@ -71,15 +76,45 @@
     }
     .success { color: #10b981; }
     .error { color: #ef4444; }
+    .hidden { display: none !important; }
+    .logout-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .logout-btn:hover { color: #ef4444; }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="logo">⚡</div>
-    <div class="title">Holder Quick Saver</div>
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div class="title">Holder Saver</div>
+    </div>
+    <button id="logoutBtn" class="logout-btn hidden" title="Log Out">Log Out</button>
   </div>
 
-  <form id="saveForm">
+  <!-- Login Section -->
+  <div id="authSection">
+    <h4 style="margin-bottom: 8px; font-size: 13px;">Sign In to Holder</h4>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn">Log In</button>
+      <div id="authStatus" class="status"></div>
+    </form>
+  </div>
+
+  <!-- Quick Saver Form Section -->
+  <form id="saveForm" class="hidden">
     <div class="form-group">
       <label for="title">Title</label>
       <input type="text" id="title" required placeholder="Loading tab title...">

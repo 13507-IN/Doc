@@ -1,13 +1,12 @@
 const Item = require('../models/Item');
-const path = require('path');
-const fs = require('fs');
 
-// Get all items with optional query parameters (folderId, type, search, isFavorite, tag)
+// Get items scoped to authenticated user
 exports.getItems = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { folderId, type, search, isFavorite, tag } = req.query;
 
-    const query = {};
+    const query = { userId };
 
     if (folderId !== undefined) {
       if (folderId === 'uncategorized' || folderId === 'null') {
@@ -56,7 +55,8 @@ exports.getItems = async (req, res) => {
 // Get single item by ID
 exports.getItemById = async (req, res) => {
   try {
-    const item = await Item.findById(req.params.id).populate('folderId', 'name icon color');
+    const userId = req.user.id;
+    const item = await Item.findOne({ _id: req.params.id, userId }).populate('folderId', 'name icon color');
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
@@ -66,9 +66,10 @@ exports.getItemById = async (req, res) => {
   }
 };
 
-// Create a new item
+// Create a new item scoped to user
 exports.createItem = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { title, type, folderId, url, content, previewUrl, tags, metadata, isFavorite, isPrivate, pinned } = req.body;
 
     if (!title || !type) {
@@ -80,6 +81,7 @@ exports.createItem = async (req, res) => {
       : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
 
     const item = new Item({
+      userId,
       title,
       type,
       folderId: folderId || null,
@@ -102,9 +104,10 @@ exports.createItem = async (req, res) => {
   }
 };
 
-// Update an existing item
+// Update existing item
 exports.updateItem = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
     const updateData = { ...req.body };
 
@@ -116,7 +119,7 @@ exports.updateItem = async (req, res) => {
       updateData.folderId = null;
     }
 
-    const item = await Item.findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+    const item = await Item.findOneAndUpdate({ _id: id, userId }, updateData, { new: true, runValidators: true })
       .populate('folderId', 'name icon color');
 
     if (!item) {
@@ -129,10 +132,11 @@ exports.updateItem = async (req, res) => {
   }
 };
 
-// Toggle favorite status
+// Toggle favorite
 exports.toggleFavorite = async (req, res) => {
   try {
-    const item = await Item.findById(req.params.id);
+    const userId = req.user.id;
+    const item = await Item.findOne({ _id: req.params.id, userId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
@@ -144,10 +148,11 @@ exports.toggleFavorite = async (req, res) => {
   }
 };
 
-// Toggle pinned status
+// Toggle pin
 exports.togglePin = async (req, res) => {
   try {
-    const item = await Item.findById(req.params.id);
+    const userId = req.user.id;
+    const item = await Item.findOne({ _id: req.params.id, userId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
@@ -162,7 +167,8 @@ exports.togglePin = async (req, res) => {
 // Delete item
 exports.deleteItem = async (req, res) => {
   try {
-    const item = await Item.findByIdAndDelete(req.params.id);
+    const userId = req.user.id;
+    const item = await Item.findOneAndDelete({ _id: req.params.id, userId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
@@ -172,7 +178,7 @@ exports.deleteItem = async (req, res) => {
   }
 };
 
-// Handle Image Upload Endpoint
+// Handle image upload
 exports.uploadImage = async (req, res) => {
   try {
     if (!req.file) {

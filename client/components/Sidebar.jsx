@@ -2,7 +2,7 @@
 import React from 'react';
 import { 
   Folder, Plus, Shield, Sparkles, Layers, 
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut, User as UserIcon
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -15,7 +15,9 @@ export default function Sidebar({
   onSelectTab,
   onOpenAddFolder,
   onOpenAssistant,
-  uncategorizedCount = 0
+  uncategorizedCount = 0,
+  user,
+  onLogout
 }) {
   return (
     <aside style={{
@@ -28,7 +30,7 @@ export default function Sidebar({
       flexDirection: 'column',
       borderRight: '1px solid var(--border-color)',
       padding: '20px 16px',
-      gap: '24px',
+      gap: '20px',
       background: 'rgba(14, 17, 30, 0.95)',
       backdropFilter: 'blur(20px)',
       zIndex: 40
@@ -159,7 +161,7 @@ export default function Sidebar({
       </div>
 
       {/* Item Types Filter */}
-      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '0 8px 6px' }}>
           Item Types
         </p>
@@ -171,6 +173,59 @@ export default function Sidebar({
           <TypeFilterBtn active={activeType === 'note'} onClick={() => onSelectType('note')} icon={<FileText size={13} color="#f59e0b" />} label="Notes" />
         </div>
       </div>
+
+      {/* Logged In User Profile Footer */}
+      {user && (
+        <div style={{
+          borderTop: '1px solid var(--border-color)',
+          paddingTop: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: '13px'
+            }}>
+              {user.name ? user.name[0].toUpperCase() : 'U'}
+            </div>
+            <div style={{ overflow: 'hidden' }}>
+              <p style={{ fontSize: '12px', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {user.name}
+              </p>
+              <p style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {user.email}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onLogout}
+            title="Log Out"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '6px'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder }) {
+export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, token }) {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([
     {
@@ -19,14 +19,15 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder }) {
     const textToSend = promptText || query;
     if (!textToSend || !textToSend.trim()) return;
 
-    // Add user message
     const userMsg = { role: 'user', text: textToSend };
     setMessages(prev => [...prev, userMsg]);
     if (!promptText) setQuery('');
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_BASE}/assistant/query`, { query: textToSend });
+      const res = await axios.post(`${API_BASE}/assistant/query`, { query: textToSend }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
       if (res.data.success) {
         const assistantMsg = {
@@ -40,7 +41,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder }) {
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        text: 'Sorry, I ran into an issue searching your vault. Please ensure the server is active.'
+        text: 'Sorry, I ran into an issue searching your vault. Please ensure you are logged in.'
       }]);
     } finally {
       setLoading(false);
@@ -132,7 +133,6 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder }) {
                 {msg.text}
               </div>
 
-              {/* Matching items preview inside response */}
               {msg.items && msg.items.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                   {msg.items.map(item => (

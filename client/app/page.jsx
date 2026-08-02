@@ -7,13 +7,18 @@ import ItemCard from '../components/ItemCard';
 import AddItemModal from '../components/AddItemModal';
 import AddFolderModal from '../components/AddFolderModal';
 import AIAssistantDrawer from '../components/AIAssistantDrawer';
+import AuthModal from '../components/AuthModal';
 import YouTubeModal from '../components/YouTubeModal';
 import ImageModal from '../components/ImageModal';
-import { Plus, Sparkles, Folder, SearchX } from 'lucide-react';
+import { Plus, SearchX } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export default function Home() {
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+
   const [items, setItems] = useState([]);
   const [folders, setFolders] = useState([]);
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
@@ -32,21 +37,64 @@ export default function Home() {
 
   const [loading, setLoading] = useState(true);
 
+  // Initialize Auth on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('holder_token');
+    const savedUser = localStorage.getItem('holder_user');
+
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        localStorage.removeItem('holder_token');
+        localStorage.removeItem('holder_user');
+        setIsAuthOpen(true);
+      }
+    } else {
+      setIsAuthOpen(true);
+    }
+  }, []);
+
+  const handleLoginSuccess = (newToken, newUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('holder_token', newToken);
+    localStorage.setItem('holder_user', JSON.stringify(newUser));
+    setIsAuthOpen(false);
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('holder_token');
+    localStorage.removeItem('holder_user');
+    setItems([]);
+    setFolders([]);
+    setIsAuthOpen(true);
+  };
+
   // Fetch Folders
   const fetchFolders = useCallback(async () => {
+    if (!token) return;
     try {
-      const res = await axios.get(`${API_BASE}/folders`);
+      const res = await axios.get(`${API_BASE}/folders`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.data.success) {
         setFolders(res.data.folders);
         setUncategorizedCount(res.data.uncategorizedCount || 0);
       }
     } catch (err) {
-      console.error('Error fetching folders:', err.message);
+      if (err.response?.status === 401) {
+        handleLogout();
+      }
     }
-  }, []);
+  }, [token]);
 
   // Fetch Items
   const fetchItems = useCallback(async () => {
+    if (!token) return;
     try {
       setLoading(true);
       const params = {};
@@ -55,28 +103,39 @@ export default function Home() {
       if (activeTab === 'favorites') params.isFavorite = 'true';
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
-      const res = await axios.get(`${API_BASE}/items`, { params });
+      const res = await axios.get(`${API_BASE}/items`, {
+        params,
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.data.success) {
         setItems(res.data.items);
       }
     } catch (err) {
-      console.error('Error fetching items:', err.message);
+      if (err.response?.status === 401) {
+        handleLogout();
+      }
     } finally {
       setLoading(false);
     }
-  }, [activeFolder, activeType, activeTab, searchQuery]);
+  }, [token, activeFolder, activeType, activeTab, searchQuery]);
 
   useEffect(() => {
-    fetchFolders();
-  }, [fetchFolders]);
+    if (token) {
+      fetchFolders();
+    }
+  }, [token, fetchFolders]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    if (token) {
+      fetchItems();
+    }
+  }, [token, fetchItems]);
 
   const handleToggleFavorite = async (id) => {
     try {
-      const res = await axios.patch(`${API_BASE}/items/${id}/favorite`);
+      const res = await axios.patch(`${API_BASE}/items/${id}/favorite`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.data.success) {
         fetchItems();
       }
@@ -87,7 +146,9 @@ export default function Home() {
 
   const handleTogglePin = async (id) => {
     try {
-      const res = await axios.patch(`${API_BASE}/items/${id}/pin`);
+      const res = await axios.patch(`${API_BASE}/items/${id}/pin`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.data.success) {
         fetchItems();
       }
@@ -99,7 +160,9 @@ export default function Home() {
   const handleDeleteItem = async (id) => {
     if (!window.confirm('Are you sure you want to delete this item from your vault?')) return;
     try {
-      const res = await axios.delete(`${API_BASE}/items/${id}`);
+      const res = await axios.delete(`${API_BASE}/items/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.data.success) {
         fetchItems();
         fetchFolders();
@@ -118,6 +181,12 @@ export default function Home() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={isAuthOpen}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
       {/* Sidebar */}
       <Sidebar 
         folders={folders}
@@ -130,6 +199,8 @@ export default function Home() {
         onOpenAddFolder={() => setIsAddFolderOpen(true)}
         onOpenAssistant={() => setIsAssistantOpen(true)}
         uncategorizedCount={uncategorizedCount}
+        user={user}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -275,18 +346,21 @@ export default function Home() {
         folders={folders}
         defaultFolderId={activeFolder}
         onItemAdded={() => { fetchItems(); fetchFolders(); }}
+        token={token}
       />
 
       <AddFolderModal 
         isOpen={isAddFolderOpen}
         onClose={() => setIsAddFolderOpen(false)}
         onFolderCreated={() => fetchFolders()}
+        token={token}
       />
 
       <AIAssistantDrawer 
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
         onSelectFolder={(fId) => setActiveFolder(fId)}
+        token={token}
       />
 
       <YouTubeModal 
