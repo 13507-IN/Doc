@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, Plus, Sparkles, RefreshCw } from 'lucide-react';
+import { Search, Plus, Sparkles, Folder, Filter, RefreshCw } from 'lucide-react';
 
 export default function Navbar({ 
   searchQuery, 
@@ -13,28 +13,29 @@ export default function Navbar({
 }) {
   return (
     <header style={{
-      height: '66px',
+      height: '70px',
       padding: '0 28px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       borderBottom: '1px solid var(--border-color)',
-      background: 'var(--bg-secondary)',
+      background: 'rgba(10, 12, 20, 0.8)',
+      backdropFilter: 'blur(16px)',
       position: 'sticky',
       top: 0,
       zIndex: 30
     }}>
       {/* Current Context / Title */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
+        <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: '#fff' }}>
           {activeFolderName || 'All Vault Items'}
         </h2>
         <span style={{
-          background: '#0f172a',
-          color: '#93c5fd',
-          border: '1px solid var(--border-color)',
-          padding: '2px 9px',
-          borderRadius: '6px',
+          background: 'rgba(99, 102, 241, 0.15)',
+          color: '#a5b4fc',
+          border: '1px solid rgba(99, 102, 241, 0.3)',
+          padding: '2px 10px',
+          borderRadius: '12px',
           fontSize: '12px',
           fontWeight: 600
         }}>
@@ -74,7 +75,7 @@ export default function Navbar({
             width: '100%',
             paddingLeft: '40px',
             fontSize: '13px',
-            height: '38px'
+            height: '40px'
           }}
         />
         {searchQuery && (
@@ -98,13 +99,13 @@ export default function Navbar({
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button 
           onClick={onOpenAddItem}
           style={{
-            padding: '9px 16px',
-            borderRadius: '8px',
-            background: 'var(--accent-primary)',
+            padding: '10px 18px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
             color: '#fff',
             border: 'none',
             fontWeight: 600,
@@ -113,10 +114,11 @@ export default function Navbar({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            transition: 'background 0.15s ease'
+            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+            transition: 'all 0.2s ease'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'var(--accent-primary)'}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
         >
           <Plus size={16} />
           <span>Save Item</span>
@@ -126,10 +128,10 @@ export default function Navbar({
           onClick={onToggleAssistant}
           style={{
             padding: '9px 14px',
-            borderRadius: '8px',
-            background: '#0f172a',
-            border: '1px solid var(--border-color)',
-            color: '#60a5fa',
+            borderRadius: '10px',
+            background: 'rgba(236, 72, 153, 0.15)',
+            border: '1px solid rgba(236, 72, 153, 0.4)',
+            color: '#f472b6',
             fontWeight: 600,
             fontSize: '13px',
             display: 'flex',
@@ -138,7 +140,7 @@ export default function Navbar({
             cursor: 'pointer'
           }}
         >
-          <Sparkles size={15} color="#3b82f6" />
+          <Sparkles size={16} />
           <span>AI Assistant</span>
         </button>
       </div>

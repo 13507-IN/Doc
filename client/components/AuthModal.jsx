@@ -46,7 +46,8 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
       position: 'fixed',
       inset: 0,
       zIndex: 200,
-      background: 'rgba(15, 23, 42, 0.95)',
+      background: 'rgba(5, 7, 15, 0.9)',
+      backdropFilter: 'blur(16px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -54,28 +55,30 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
     }}>
       <div className="glass-panel" style={{
         width: '100%',
-        maxWidth: '420px',
-        borderRadius: '16px',
+        maxWidth: '440px',
+        borderRadius: '24px',
         padding: '32px',
-        border: '1px solid var(--border-color)',
+        boxShadow: '0 25px 60px rgba(0,0,0,0.8)',
+        border: '1px solid rgba(99, 102, 241, 0.3)',
         position: 'relative'
       }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '10px',
-            background: 'var(--accent-primary)',
+            width: '50px',
+            height: '50px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
-            marginBottom: '12px'
+            marginBottom: '12px',
+            boxShadow: '0 6px 20px rgba(99, 102, 241, 0.5)'
           }}>
-            <Sparkles size={24} />
+            <Sparkles size={26} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, color: '#fff' }}>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', fontWeight: 800, color: '#fff' }}>
             {isSignup ? 'Create Your Account' : 'Welcome Back'}
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -87,9 +90,9 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          background: '#0f172a',
+          background: 'rgba(255, 255, 255, 0.05)',
           padding: '4px',
-          borderRadius: '8px',
+          borderRadius: '12px',
           marginBottom: '20px'
         }}>
           <button
@@ -97,7 +100,7 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
             onClick={() => { setIsSignup(false); setError(''); }}
             style={{
               padding: '8px',
-              borderRadius: '6px',
+              borderRadius: '8px',
               background: !isSignup ? 'var(--accent-primary)' : 'transparent',
               color: '#fff',
               border: 'none',
@@ -113,7 +116,7 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
             onClick={() => { setIsSignup(true); setError(''); }}
             style={{
               padding: '8px',
-              borderRadius: '6px',
+              borderRadius: '8px',
               background: isSignup ? 'var(--accent-primary)' : 'transparent',
               color: '#fff',
               border: 'none',
@@ -130,9 +133,9 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
         {error && (
           <div style={{
             padding: '10px 14px',
-            borderRadius: '8px',
-            background: 'rgba(220, 38, 38, 0.15)',
-            border: '1px solid rgba(220, 38, 38, 0.4)',
+            borderRadius: '10px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
             color: '#fca5a5',
             fontSize: '12px',
             display: 'flex',
@@ -207,9 +210,9 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
             type="submit"
             disabled={loading}
             style={{
-              padding: '11px',
-              borderRadius: '8px',
-              background: 'var(--accent-primary)',
+              padding: '12px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
               color: '#fff',
               border: 'none',
               fontWeight: 700,
@@ -219,7 +222,8 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
               justifyContent: 'center',
               gap: '8px',
               cursor: 'pointer',
-              marginTop: '6px'
+              marginTop: '8px',
+              boxShadow: '0 4px 16px rgba(99, 102, 241, 0.4)'
             }}
           >
             <span>{loading ? 'Processing...' : (isSignup ? 'Create Vault' : 'Sign In')}</span>
