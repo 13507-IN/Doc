@@ -25,28 +25,24 @@ app.use('/uploads', express.static(uploadsDir));
 
 // Database Readiness Check Middleware
 app.use(async (req, res, next) => {
-  // Allow health check without DB
   if (req.path === '/health') return next();
 
-  // If connected (readyState === 1), proceed
   if (mongoose.connection.readyState === 1) {
     return next();
   }
 
-  // If connecting (readyState === 2), wait briefly
   if (mongoose.connection.readyState === 2) {
     let checkAttempts = 0;
-    while (mongoose.connection.readyState === 2 && checkAttempts < 10) {
+    while (mongoose.connection.readyState === 2 && checkAttempts < 15) {
       await new Promise(resolve => setTimeout(resolve, 300));
       checkAttempts++;
     }
     if (mongoose.connection.readyState === 1) return next();
   }
 
-  // If DB failed or not connected
   return res.status(503).json({
     success: false,
-    message: 'Database is not connected yet or MONGO_URI is invalid. Please verify your MongoDB connection string in environment variables.'
+    message: 'Database is not connected yet. Please ensure MongoDB Atlas Network Access is set to allow connections (0.0.0.0/0).'
   });
 });
 
@@ -63,21 +59,31 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Database Connection with Memory Fallback
+// Database Connection
 async function connectDB() {
-  const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
-  
+  let MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
+
+  // Ensure DB name exists in Atlas URI
+  if (MONGO_URI.includes('mongodb+srv://') && !MONGO_URI.includes('.net/holder_db')) {
+    MONGO_URI = MONGO_URI.replace('.net/?', '.net/holder_db?').replace('.net/', '.net/holder_db?');
+  }
+
   try {
     console.log(`Connecting to MongoDB...`);
     await mongoose.connect(MONGO_URI, { 
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 10000 
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 15000
     });
     console.log('✅ Connected to MongoDB server successfully.');
   } catch (err) {
-    console.warn(`⚠️ Primary MongoDB connection failed (${err.message}). Attempting In-Memory Fallback...`);
+    console.warn(`⚠️ MongoDB connection error: ${err.message}. Attempting MongoMemoryServer Fallback...`);
     try {
-      const mongod = await MongoMemoryServer.create();
+      // Use version 7.0.3 for Debian 12 compatibility
+      const mongod = await MongoMemoryServer.create({
+        binary: {
+          version: '7.0.3'
+        }
+      });
       const memoryUri = mongod.getUri();
       await mongoose.connect(memoryUri);
       console.log(`🚀 Connected to In-Memory MongoDB instance at: ${memoryUri}`);
