@@ -23,13 +23,44 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
+// Database Readiness Check Middleware
+app.use(async (req, res, next) => {
+  // Allow health check without DB
+  if (req.path === '/health') return next();
+
+  // If connected (readyState === 1), proceed
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+
+  // If connecting (readyState === 2), wait briefly
+  if (mongoose.connection.readyState === 2) {
+    let checkAttempts = 0;
+    while (mongoose.connection.readyState === 2 && checkAttempts < 10) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      checkAttempts++;
+    }
+    if (mongoose.connection.readyState === 1) return next();
+  }
+
+  // If DB failed or not connected
+  return res.status(503).json({
+    success: false,
+    message: 'Database is not connected yet or MONGO_URI is invalid. Please verify your MongoDB connection string in environment variables.'
+  });
+});
+
 // API Routes
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Holder Personal Assistant API is running smoothly' });
+  res.json({ 
+    status: 'ok', 
+    dbState: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    message: 'Holder Personal Assistant API is running' 
+  });
 });
 
 // Database Connection with Memory Fallback
@@ -37,11 +68,14 @@ async function connectDB() {
   const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
   
   try {
-    console.log(`Connecting to MongoDB at: ${MONGO_URI}...`);
-    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 3000 });
+    console.log(`Connecting to MongoDB...`);
+    await mongoose.connect(MONGO_URI, { 
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000 
+    });
     console.log('✅ Connected to MongoDB server successfully.');
   } catch (err) {
-    console.warn('⚠️ Local MongoDB connection failed or not running. Initializing In-Memory MongoDB Fallback...');
+    console.warn(`⚠️ Primary MongoDB connection failed (${err.message}). Attempting In-Memory Fallback...`);
     try {
       const mongod = await MongoMemoryServer.create();
       const memoryUri = mongod.getUri();
