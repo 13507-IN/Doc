@@ -42,7 +42,7 @@ app.use(async (req, res, next) => {
 
   return res.status(503).json({
     success: false,
-    message: 'Database is not connected yet. Please ensure MongoDB Atlas Network Access is set to allow connections (0.0.0.0/0).'
+    message: 'Database is connecting or unavailable. Please ensure MongoDB Atlas Network Access is set to allow connections (0.0.0.0/0).'
   });
 });
 
@@ -61,16 +61,12 @@ app.get('/health', (req, res) => {
 
 // Database Connection
 async function connectDB() {
-  let MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
-
-  // Ensure DB name exists in Atlas URI
-  if (MONGO_URI.includes('mongodb+srv://') && !MONGO_URI.includes('.net/holder_db')) {
-    MONGO_URI = MONGO_URI.replace('.net/?', '.net/holder_db?').replace('.net/', '.net/holder_db?');
-  }
+  const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
 
   try {
     console.log(`Connecting to MongoDB...`);
     await mongoose.connect(MONGO_URI, { 
+      dbName: 'holder_db',
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 15000
     });
@@ -78,14 +74,13 @@ async function connectDB() {
   } catch (err) {
     console.warn(`⚠️ MongoDB connection error: ${err.message}. Attempting MongoMemoryServer Fallback...`);
     try {
-      // Use version 7.0.3 for Debian 12 compatibility
       const mongod = await MongoMemoryServer.create({
         binary: {
           version: '7.0.3'
         }
       });
       const memoryUri = mongod.getUri();
-      await mongoose.connect(memoryUri);
+      await mongoose.connect(memoryUri, { dbName: 'holder_db' });
       console.log(`🚀 Connected to In-Memory MongoDB instance at: ${memoryUri}`);
     } catch (memErr) {
       console.error('❌ Failed to start In-Memory MongoDB:', memErr.message);
