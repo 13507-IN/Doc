@@ -14,7 +14,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
     body {
-      width: 330px;
+      width: 340px;
       padding: 16px;
       background: var(--bg);
       color: var(--text);
@@ -23,7 +23,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
     }
@@ -44,7 +44,7 @@
       font-size: 14px;
     }
     .title { font-size: 15px; font-weight: 700; }
-    .form-group { margin-bottom: 12px; }
+    .form-group { margin-bottom: 10px; }
     label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
     input, select, textarea {
       width: 100%;
@@ -77,14 +77,30 @@
     .success { color: #10b981; }
     .error { color: #ef4444; }
     .hidden { display: none !important; }
-    .logout-btn {
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
       background: transparent;
       border: none;
       color: var(--muted);
       cursor: pointer;
-      font-size: 11px;
+      font-size: 14px;
     }
-    .logout-btn:hover { color: #ef4444; }
+    .icon-btn:hover { color: #fff; }
+    .user-badge {
+      font-size: 11px;
+      color: #a5b4fc;
+      background: rgba(99, 102, 241, 0.15);
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
   </style>
 </head>
 <body>
@@ -93,12 +109,33 @@
       <div class="logo">⚡</div>
       <div class="title">Holder Saver</div>
     </div>
-    <button id="logoutBtn" class="logout-btn hidden" title="Log Out">Log Out</button>
+    <div class="header-actions">
+      <button id="serverConfigBtn" class="icon-btn" title="Server Settings">⚙️</button>
+      <button id="logoutBtn" class="icon-btn hidden" title="Log Out">🚪</button>
+    </div>
+  </div>
+
+  <!-- Server Config Section -->
+  <div id="serverConfigSection" class="hidden" style="background: rgba(255,255,255,0.04); padding: 10px; borderRadius: 8px; margin-bottom: 12px;">
+    <div class="form-group">
+      <label for="serverUrlInput">API Server URL</label>
+      <input type="text" id="serverUrlInput" placeholder="http://localhost:5000/api">
+    </div>
+    <button id="saveServerUrlBtn" class="btn" style="padding: 6px; font-size: 11px;">Save Server URL</button>
+  </div>
+
+  <!-- User Sync Badge -->
+  <div id="userBadge" class="user-badge hidden">
+    <span>Logged in as: <strong id="userName">User</strong></span>
+    <span style="font-size: 9px; color: #10b981;">● Synced</span>
   </div>
 
   <!-- Login Section -->
   <div id="authSection">
-    <h4 style="margin-bottom: 8px; font-size: 13px;">Sign In to Holder</h4>
+    <h4 style="margin-bottom: 6px; font-size: 13px;">Sign In to Holder</h4>
+    <p style="font-size: 11px; color: var(--muted); margin-bottom: 10px;">
+      Log in here, or sign in on the website for automatic sync!
+    </p>
     <form id="loginForm">
       <div class="form-group">
         <label for="loginEmail">Email</label>

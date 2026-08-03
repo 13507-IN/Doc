@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api';
+let API_BASE = 'http://localhost:5000/api';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const authSection = document.getElementById('authSection');
@@ -6,6 +6,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const loginForm = document.getElementById('loginForm');
   const logoutBtn = document.getElementById('logoutBtn');
   const authStatus = document.getElementById('authStatus');
+  const userBadge = document.getElementById('userBadge');
+  const userName = document.getElementById('userName');
+
+  const serverConfigBtn = document.getElementById('serverConfigBtn');
+  const serverConfigSection = document.getElementById('serverConfigSection');
+  const serverUrlInput = document.getElementById('serverUrlInput');
+  const saveServerUrlBtn = document.getElementById('saveServerUrlBtn');
 
   const titleInput = document.getElementById('title');
   const urlInput = document.getElementById('url');
@@ -14,50 +21,89 @@ document.addEventListener('DOMContentLoaded', async () => {
   const notesInput = document.getElementById('notes');
   const statusDiv = document.getElementById('status');
 
-  // Check saved token from chrome.storage.local
-  chrome.storage.local.get(['holder_token'], async (result) => {
-    const token = result.holder_token;
-
-    if (token) {
-      // Validate token
-      try {
-        const meRes = await fetch(`${API_BASE}/auth/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const meData = await meRes.json();
-        if (meData.success) {
-          showSaverForm(token);
-        } else {
-          showAuthSection();
-        }
-      } catch (err) {
-        showSaverForm(token); // offline fallback
-      }
-    } else {
-      showAuthSection();
+  // Load configured API Server URL from chrome.storage.local
+  chrome.storage.local.get(['holder_server_url'], (res) => {
+    if (res.holder_server_url) {
+      API_BASE = res.holder_server_url.replace(/\/$/, '');
     }
+    serverUrlInput.value = API_BASE;
+    initAuthCheck();
   });
+
+  // Toggle Server Settings
+  serverConfigBtn.addEventListener('click', () => {
+    serverConfigSection.classList.toggle('hidden');
+  });
+
+  saveServerUrlBtn.addEventListener('click', () => {
+    let newUrl = serverUrlInput.value.trim();
+    if (!newUrl) return;
+    if (!newUrl.endsWith('/api') && !newUrl.includes('/api/')) {
+      newUrl = `${newUrl.replace(/\/$/, '')}/api`;
+    }
+    API_BASE = newUrl;
+    chrome.storage.local.set({ holder_server_url: newUrl }, () => {
+      serverConfigSection.classList.add('hidden');
+      initAuthCheck();
+    });
+  });
+
+  // Check saved token from chrome.storage.local (synced from web app or manual login)
+  function initAuthCheck() {
+    chrome.storage.local.get(['holder_token', 'holder_user'], async (result) => {
+      const token = result.holder_token;
+      const user = result.holder_user;
+
+      if (token) {
+        try {
+          const meRes = await fetch(`${API_BASE}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const meData = await meRes.json();
+          if (meData.success) {
+            showSaverForm(token, meData.user || user);
+          } else {
+            showAuthSection();
+          }
+        } catch (err) {
+          // If offline or network issue, trust local token
+          showSaverForm(token, user);
+        }
+      } else {
+        showAuthSection();
+      }
+    });
+  }
 
   function showAuthSection() {
     authSection.classList.remove('hidden');
     saveForm.classList.add('hidden');
     logoutBtn.classList.add('hidden');
+    userBadge.classList.add('hidden');
   }
 
-  function showSaverForm(token) {
+  function showSaverForm(token, user) {
     authSection.classList.add('hidden');
     saveForm.classList.remove('hidden');
     logoutBtn.classList.remove('hidden');
+
+    if (user && user.name) {
+      userName.textContent = user.name;
+      userBadge.classList.remove('hidden');
+    } else {
+      userBadge.classList.add('hidden');
+    }
+
     loadFoldersAndTab(token);
   }
 
-  // Handle Login
+  // Handle Manual Login inside Popup
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    authStatus.textContent = 'Logging in...';
+    authStatus.textContent = 'Connecting...';
     authStatus.className = 'status';
 
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
 
     try {
@@ -69,12 +115,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       const data = await res.json();
 
       if (data.success && data.token) {
-        chrome.storage.local.set({ holder_token: data.token });
-        authStatus.textContent = '✅ Logged in successfully!';
+        chrome.storage.local.set({ 
+          holder_token: data.token,
+          holder_user: data.user
+        });
+        authStatus.textContent = '✅ Logged in!';
         authStatus.className = 'status success';
-        setTimeout(() => showSaverForm(data.token), 800);
+        setTimeout(() => showSaverForm(data.token, data.user), 600);
       } else {
-        throw new Error(data.message || 'Login failed');
+        throw new Error(data.message || 'Invalid email or password');
       }
     } catch (err) {
       authStatus.textContent = `❌ ${err.message}`;
@@ -84,7 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Handle Logout
   logoutBtn.addEventListener('click', () => {
-    chrome.storage.local.remove(['holder_token']);
+    chrome.storage.local.remove(['holder_token', 'holder_user']);
     showAuthSection();
   });
 

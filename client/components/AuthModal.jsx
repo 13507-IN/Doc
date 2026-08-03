@@ -27,6 +27,9 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
       const res = await axios.post(endpoint, payload);
 
       if (res.data.success && res.data.token) {
+        if (typeof window !== 'undefined') {
+          window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: res.data.token, user: res.data.user }, '*');
+        }
         onLoginSuccess(res.data.token, res.data.user);
       } else {
         setError(res.data.message || 'Authentication failed');

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Holder — Quick Personal Assistant Saver",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Clip YouTube videos, images, links & notes directly to your Holder Personal Info Vault & Assistant.",
   "permissions": [
     "activeTab",
@@ -9,7 +9,25 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://localhost:5000/*"
+    "http://localhost:3000/*",
+    "http://localhost:5000/*",
+    "https://*.vercel.app/*",
+    "https://*.onrender.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://*.vercel.app/*",
+        "<all_urls>"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "action": {
     "default_popup": "popup.html",

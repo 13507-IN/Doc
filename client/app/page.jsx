@@ -45,7 +45,11 @@ export default function Home() {
     if (savedToken && savedUser) {
       setToken(savedToken);
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        if (typeof window !== 'undefined') {
+          window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: savedToken, user: parsedUser }, '*');
+        }
       } catch (e) {
         localStorage.removeItem('holder_token');
         localStorage.removeItem('holder_user');
@@ -61,6 +65,9 @@ export default function Home() {
     setUser(newUser);
     localStorage.setItem('holder_token', newToken);
     localStorage.setItem('holder_user', JSON.stringify(newUser));
+    if (typeof window !== 'undefined') {
+      window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: newToken, user: newUser }, '*');
+    }
     setIsAuthOpen(false);
   };
 
@@ -69,6 +76,9 @@ export default function Home() {
     setUser(null);
     localStorage.removeItem('holder_token');
     localStorage.removeItem('holder_user');
+    if (typeof window !== 'undefined') {
+      window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: null, user: null }, '*');
+    }
     setItems([]);
     setFolders([]);
     setIsAuthOpen(true);
