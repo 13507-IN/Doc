@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { X, Sparkles, Send, Tv, Image as ImageIcon, Link as LinkIcon, FileText, ArrowRight, ExternalLink } from 'lucide-react';
+import { X, Sparkles, Send, ArrowRight, ExternalLink } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -55,35 +55,34 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
       position: 'fixed',
       inset: 0,
       zIndex: 90,
-      background: 'rgba(0, 0, 0, 0.5)',
-      backdropFilter: 'blur(4px)',
+      background: 'rgba(15, 23, 42, 0.6)',
       display: 'flex',
       justifyContent: 'flex-end'
     }}>
       <div className="glass-panel" style={{
-        width: '450px',
+        width: '440px',
         maxWidth: '100%',
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '-10px 0 40px rgba(0,0,0,0.6)',
-        animation: 'fadeIn 0.25s ease-out'
+        boxShadow: '-8px 0 30px rgba(0,0,0,0.4)',
+        animation: 'fadeIn 0.2s ease-out'
       }}>
         {/* Header */}
         <div style={{
-          padding: '20px',
+          padding: '18px 20px',
           borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(18, 21, 38, 0.9)'
+          background: 'var(--bg-secondary)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #ec4899 0%, #6366f1 100%)',
+              background: 'var(--accent-primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -105,14 +104,14 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         </div>
 
         {/* Suggested Prompts */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto', background: '#0f172a' }}>
           <PromptChip onClick={() => handleSend('Get all my YouTube links')} label="🎥 YouTube Links" />
           <PromptChip onClick={() => handleSend('Show Brand Assets folder')} label="💼 Brand Assets" />
           <PromptChip onClick={() => handleSend('Find private & important notes')} label="🔒 Private Notes" />
         </div>
 
         {/* Chat Timeline */}
-        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--bg-secondary)' }}>
           {messages.map((msg, idx) => (
             <div key={idx} style={{
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -122,9 +121,9 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
               gap: '8px'
             }}>
               <div style={{
-                padding: '12px 16px',
-                borderRadius: msg.role === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                background: msg.role === 'user' ? 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)' : 'rgba(255, 255, 255, 0.07)',
+                padding: '10px 14px',
+                borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                background: msg.role === 'user' ? 'var(--accent-primary)' : '#0f172a',
                 color: '#fff',
                 fontSize: '13px',
                 lineHeight: '1.5',
@@ -138,9 +137,9 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                   {msg.items.map(item => (
                     <div key={item._id} style={{
                       padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: 'rgba(10, 12, 22, 0.7)',
-                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      borderRadius: '8px',
+                      background: '#0f172a',
+                      border: '1px solid var(--border-color)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -169,10 +168,10 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                   onClick={() => { onSelectFolder(msg.targetFolder.id); onClose(); }}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
-                    background: 'rgba(99, 102, 241, 0.2)',
+                    borderRadius: '6px',
+                    background: 'rgba(37, 99, 235, 0.15)',
                     border: '1px solid var(--accent-primary)',
-                    color: '#a5b4fc',
+                    color: '#93c5fd',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -190,14 +189,14 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
           ))}
 
           {loading && (
-            <div style={{ fontSize: '12px', color: 'var(--accent-pink)', fontStyle: 'italic' }}>
+            <div style={{ fontSize: '12px', color: '#60a5fa', fontStyle: 'italic' }}>
               Searching your personal vault...
             </div>
           )}
         </div>
 
         {/* Input Bar */}
-        <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', background: 'rgba(14, 17, 30, 0.95)' }}>
+        <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
           <form 
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             style={{ display: 'flex', gap: '8px' }}
@@ -214,10 +213,10 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
               type="submit"
               disabled={loading}
               style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #ec4899 0%, #6366f1 100%)',
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                background: 'var(--accent-primary)',
                 color: '#fff',
                 border: 'none',
                 display: 'flex',
@@ -240,9 +239,9 @@ function PromptChip({ onClick, label }) {
     <button 
       onClick={onClick}
       style={{
-        padding: '6px 12px',
-        borderRadius: '16px',
-        background: 'rgba(255, 255, 255, 0.05)',
+        padding: '5px 10px',
+        borderRadius: '6px',
+        background: 'var(--bg-secondary)',
         border: '1px solid var(--border-color)',
         color: 'var(--text-muted)',
         fontSize: '11px',
