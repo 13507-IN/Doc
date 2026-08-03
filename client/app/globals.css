@@ -1,27 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg-primary: #0a0c14;
-  --bg-secondary: #121524;
-  --bg-card: rgba(22, 26, 45, 0.65);
-  --bg-glass: rgba(18, 21, 38, 0.75);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(99, 102, 241, 0.4);
+  /* Curated 3-Color Solid Palette */
+  --bg-primary: #0f172a;        /* Solid Dark Slate Graphite */
+  --bg-secondary: #1e293b;      /* Solid Card & Sidebar Surface */
+  --bg-card: #1e293b;
+  --bg-glass: #1e293b;
   
-  --accent-primary: #6366f1;
-  --accent-primary-hover: #4f46e5;
-  --accent-glow: rgba(99, 102, 241, 0.3);
-  --accent-pink: #ec4899;
-  --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-red: #ef4444;
+  --border-color: #334155;     /* Crisp Solid Slate Border */
+  --border-hover: #2563eb;     /* Solid Sapphire Blue Hover */
+  
+  --accent-primary: #2563eb;    /* Color 1: Solid Sapphire Blue */
+  --accent-primary-hover: #1d4ed8;
+  --accent-emerald: #059669;    /* Color 2: Solid Emerald Mint */
+  --accent-amber: #d97706;      /* Color 3: Solid Amber Gold */
+  --accent-red: #dc2626;
 
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #f8fafc;        /* Crisp White Text */
+  --text-muted: #94a3b8;       /* Muted Slate Text */
   --text-dim: #64748b;
 
-  --font-heading: 'Outfit', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * {
@@ -36,11 +36,6 @@ body {
   font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
-  background-image: 
-    radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 85% 75%, rgba(236, 72, 153, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 60%);
-  background-attachment: fixed;
 }
 
 /* Custom Scrollbar */
@@ -50,71 +45,60 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(10, 12, 20, 0.5);
+  background: #0f172a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: #334155;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: #2563eb;
 }
 
-/* Glassmorphism Utilities */
+/* Card & Panel Styling */
 .glass-panel {
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .glass-card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
 .glass-card:hover {
   border-color: var(--border-hover);
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px -6px rgba(99, 102, 241, 0.25);
+  transform: translateY(-2px);
 }
 
 .glass-input {
-  background: rgba(15, 18, 33, 0.7);
+  background: #0f172a;
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 10px 14px;
   font-family: var(--font-body);
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
 .glass-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulseGlow {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.9; }
-}
-
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+  animation: fadeIn 0.2s ease-out forwards;
 }
 
 /* Badge Tags */
@@ -123,14 +107,14 @@ body {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: 6px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.type-youtube { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
-.type-image { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
-.type-link { background: rgba(59, 130, 246, 0.18); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
-.type-note { background: rgba(245, 158, 11, 0.18); color: #fde047; border: 1px solid rgba(245, 158, 11, 0.3); }
+.type-youtube { background: rgba(220, 38, 38, 0.15); color: #fca5a5; border: 1px solid rgba(220, 38, 38, 0.3); }
+.type-image { background: rgba(5, 150, 105, 0.15); color: #6ee7b7; border: 1px solid rgba(5, 150, 105, 0.3); }
+.type-link { background: rgba(37, 99, 235, 0.15); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.3); }
+.type-note { background: rgba(217, 119, 6, 0.15); color: #fde047; border: 1px solid rgba(217, 119, 6, 0.3); }
