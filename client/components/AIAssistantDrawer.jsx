@@ -55,7 +55,8 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
       position: 'fixed',
       inset: 0,
       zIndex: 90,
-      background: 'rgba(15, 23, 42, 0.6)',
+      background: 'rgba(11, 15, 25, 0.65)',
+      backdropFilter: 'blur(4px)',
       display: 'flex',
       justifyContent: 'flex-end'
     }}>
@@ -66,7 +67,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '-8px 0 30px rgba(0,0,0,0.4)',
-        animation: 'fadeIn 0.2s ease-out'
+        animation: 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
         {/* Header */}
         <div style={{
@@ -79,22 +80,28 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
-              width: '32px',
-              height: '32px',
+              width: '34px',
+              height: '34px',
               borderRadius: '8px',
               background: 'var(--accent-primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fff'
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
             }}>
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: '#fff' }}>
-                Holder Assistant
-              </h3>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AI Knowledge Retrieval</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: '#fff' }}>
+                  Holder Assistant
+                </h3>
+                <span style={{ fontSize: '10px', color: '#059669', background: 'rgba(5, 150, 105, 0.15)', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
+                  ● Ready
+                </span>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AI Knowledge Retrieval Engine</p>
             </div>
           </div>
 
@@ -104,7 +111,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         </div>
 
         {/* Suggested Prompts */}
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto', background: '#0f172a' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto', background: 'var(--bg-primary)' }}>
           <PromptChip onClick={() => handleSend('Get all my YouTube links')} label="🎥 YouTube Links" />
           <PromptChip onClick={() => handleSend('Show Brand Assets folder')} label="💼 Brand Assets" />
           <PromptChip onClick={() => handleSend('Find private & important notes')} label="🔒 Private Notes" />
@@ -121,9 +128,9 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
               gap: '8px'
             }}>
               <div style={{
-                padding: '10px 14px',
-                borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                background: msg.role === 'user' ? 'var(--accent-primary)' : '#0f172a',
+                padding: '11px 15px',
+                borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                background: msg.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-primary)',
                 color: '#fff',
                 fontSize: '13px',
                 lineHeight: '1.5',
@@ -138,7 +145,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                     <div key={item._id} style={{
                       padding: '10px 12px',
                       borderRadius: '8px',
-                      background: '#0f172a',
+                      background: 'var(--bg-primary)',
                       border: '1px solid var(--border-color)',
                       display: 'flex',
                       alignItems: 'center',
@@ -247,7 +254,16 @@ function PromptChip({ onClick, label }) {
         fontSize: '11px',
         fontWeight: 600,
         whiteSpace: 'nowrap',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        transition: 'all 0.15s ease'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--accent-primary)';
+        e.currentTarget.style.color = '#fff';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-color)';
+        e.currentTarget.style.color = 'var(--text-muted)';
       }}
     >
       {label}

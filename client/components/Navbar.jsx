@@ -30,11 +30,11 @@ export default function Navbar({
           {activeFolderName || 'All Vault Items'}
         </h2>
         <span style={{
-          background: '#0f172a',
+          background: 'var(--bg-primary)',
           color: '#93c5fd',
           border: '1px solid var(--border-color)',
           padding: '2px 9px',
-          borderRadius: '6px',
+          borderRadius: '12px',
           fontSize: '12px',
           fontWeight: 600
         }}>
@@ -50,8 +50,12 @@ export default function Navbar({
             cursor: 'pointer',
             padding: '4px',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            borderRadius: '6px',
+            transition: 'color 0.15s ease'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
         >
           <RefreshCw size={14} />
         </button>
@@ -73,11 +77,12 @@ export default function Navbar({
           style={{
             width: '100%',
             paddingLeft: '40px',
+            paddingRight: '36px',
             fontSize: '13px',
             height: '38px'
           }}
         />
-        {searchQuery && (
+        {searchQuery ? (
           <button 
             onClick={() => onSearchChange('')}
             style={{
@@ -94,6 +99,22 @@ export default function Navbar({
           >
             ✕
           </button>
+        ) : (
+          <span style={{
+            position: 'absolute',
+            right: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: '10px',
+            color: 'var(--text-dim)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px',
+            padding: '1px 5px',
+            background: 'var(--bg-secondary)',
+            fontFamily: 'monospace'
+          }}>
+            ⌘K
+          </span>
         )}
       </div>
 
@@ -113,10 +134,17 @@ export default function Navbar({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            transition: 'background 0.15s ease'
+            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+            transition: 'all 0.15s ease'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'var(--accent-primary)'}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#1d4ed8';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--accent-primary)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
         >
           <Plus size={16} />
           <span>Save Item</span>
@@ -127,7 +155,7 @@ export default function Navbar({
           style={{
             padding: '9px 14px',
             borderRadius: '8px',
-            background: '#0f172a',
+            background: 'var(--bg-primary)',
             border: '1px solid var(--border-color)',
             color: '#60a5fa',
             fontWeight: 600,
@@ -135,7 +163,14 @@ export default function Navbar({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-color)';
           }}
         >
           <Sparkles size={15} color="#3b82f6" />

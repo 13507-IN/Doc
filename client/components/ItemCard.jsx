@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Play, ExternalLink, Copy, Check, Star, Pin, Trash2, 
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Lock, Folder
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText
 } from 'lucide-react';
 
 export default function ItemCard({ 
@@ -53,40 +53,47 @@ export default function ItemCard({
       {/* Top Banner / Preview Thumbnail */}
       {item.type === 'youtube' && (
         <div 
+          className="card-media-wrapper"
           onClick={() => onPlayYouTube(item)}
           style={{
-            position: 'relative',
             height: '160px',
             width: '100%',
-            backgroundColor: '#000',
-            backgroundImage: `url(${item.previewUrl || `https://img.youtube.com/vi/${item.metadata?.youtubeId}/hqdefault.jpg`})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundColor: '#0b0f19',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}
         >
+          <div 
+            className="card-media-img"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(${item.previewUrl || `https://img.youtube.com/vi/${item.metadata?.youtubeId}/hqdefault.jpg`})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          />
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(to top, rgba(10, 12, 20, 0.9) 0%, transparent 60%)'
+            background: 'linear-gradient(to top, rgba(11, 15, 25, 0.9) 0%, transparent 60%)'
           }} />
           <div style={{
             zIndex: 2,
-            width: '48px',
-            height: '48px',
+            width: '44px',
+            height: '44px',
             borderRadius: '50%',
-            background: 'rgba(239, 68, 68, 0.9)',
+            background: '#dc2626',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
-            boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)',
+            boxShadow: '0 4px 16px rgba(220, 38, 38, 0.5)',
             transition: 'transform 0.2s ease'
           }}>
-            <Play size={22} style={{ marginLeft: '3px' }} />
+            <Play size={20} style={{ marginLeft: '2px' }} />
           </div>
           <span style={{
             position: 'absolute',
@@ -105,35 +112,46 @@ export default function ItemCard({
 
       {item.type === 'image' && (
         <div 
+          className="card-media-wrapper"
           onClick={() => onViewImage(item)}
           style={{
-            position: 'relative',
             height: '170px',
             width: '100%',
-            backgroundColor: '#151828',
-            backgroundImage: `url(${item.previewUrl || item.url || item.content})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundColor: '#0b0f19',
             cursor: 'pointer'
           }}
         >
+          <div 
+            className="card-media-img"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(${item.previewUrl || item.url || item.content})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          />
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(to top, rgba(10, 12, 20, 0.7) 0%, transparent 60%)'
+            background: 'linear-gradient(to top, rgba(11, 15, 25, 0.7) 0%, transparent 60%)'
           }} />
         </div>
       )}
 
       {item.type === 'link' && item.previewUrl && (
-        <div style={{
-          height: '120px',
-          width: '100%',
-          backgroundColor: '#151828',
-          backgroundImage: `url(${item.previewUrl})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }} />
+        <div className="card-media-wrapper" style={{ height: '120px', width: '100%', backgroundColor: '#0b0f19' }}>
+          <div 
+            className="card-media-img"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(${item.previewUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          />
+        </div>
       )}
 
       {/* Main Content Info */}
@@ -150,9 +168,10 @@ export default function ItemCard({
               <span style={{
                 fontSize: '11px',
                 padding: '3px 8px',
-                borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                color: item.folderId.color || '#a5b4fc',
+                borderRadius: '6px',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                color: item.folderId.color || '#93c5fd',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
@@ -164,19 +183,21 @@ export default function ItemCard({
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
             <button 
               onClick={() => onToggleFavorite(item._id)}
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: item.isFavorite ? '#f59e0b' : 'var(--text-dim)',
+                color: item.isFavorite ? '#d97706' : 'var(--text-dim)',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '4px',
+                borderRadius: '4px',
+                transition: 'color 0.15s ease'
               }}
               title="Favorite"
             >
-              <Star size={15} fill={item.isFavorite ? '#f59e0b' : 'transparent'} />
+              <Star size={15} fill={item.isFavorite ? '#d97706' : 'transparent'} />
             </button>
 
             <button 
@@ -186,7 +207,9 @@ export default function ItemCard({
                 border: 'none',
                 color: item.pinned ? 'var(--accent-amber)' : 'var(--text-dim)',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '4px',
+                borderRadius: '4px',
+                transition: 'color 0.15s ease'
               }}
               title="Pin to top"
             >
@@ -213,7 +236,8 @@ export default function ItemCard({
         {/* Content Preview for Notes or Links */}
         {item.type === 'note' && item.content && (
           <div style={{
-            background: 'rgba(10, 12, 22, 0.6)',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
             padding: '10px 12px',
             borderRadius: '8px',
             fontSize: '12px',
@@ -247,10 +271,12 @@ export default function ItemCard({
             {item.tags.map((tag, idx) => (
               <span key={idx} style={{
                 fontSize: '10px',
-                color: '#818cf8',
-                background: 'rgba(99, 102, 241, 0.1)',
-                padding: '2px 6px',
-                borderRadius: '6px'
+                color: '#93c5fd',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                padding: '2px 7px',
+                borderRadius: '6px',
+                fontWeight: 600
               }}>
                 #{tag}
               </span>
@@ -263,7 +289,7 @@ export default function ItemCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+          borderTop: '1px solid var(--border-color)',
           paddingTop: '10px',
           marginTop: 'auto'
         }}>
@@ -278,7 +304,7 @@ export default function ItemCard({
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: copied ? '#10b981' : 'var(--text-muted)',
+                  color: copied ? '#059669' : 'var(--text-muted)',
                   cursor: 'pointer',
                   padding: '4px',
                   display: 'flex',
@@ -316,9 +342,10 @@ export default function ItemCard({
                 border: 'none',
                 color: 'var(--text-dim)',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '4px',
+                transition: 'color 0.15s ease'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#dc2626'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
               title="Delete Item"
             >

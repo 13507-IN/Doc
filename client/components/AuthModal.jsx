@@ -52,7 +52,7 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
       justifyContent: 'center',
       padding: '20px'
     }}>
-      <div className="glass-panel" style={{
+      <div className="glass-panel animate-scale-in" style={{
         width: '100%',
         maxWidth: '420px',
         borderRadius: '16px',

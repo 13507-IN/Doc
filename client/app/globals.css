@@ -1,23 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Curated 3-Color Solid Palette */
-  --bg-primary: #0f172a;        /* Solid Dark Slate Graphite */
-  --bg-secondary: #1e293b;      /* Solid Card & Sidebar Surface */
-  --bg-card: #1e293b;
-  --bg-glass: #1e293b;
+  /* Ultra-Sleek Solid Palette */
+  --bg-primary: #0b0f19;        /* Deeper Slate Charcoal Base */
+  --bg-secondary: #151d2a;      /* Sleek Container Surface */
+  --bg-card: #1c2638;           /* Crisp Card Surface */
+  --bg-card-hover: #222f46;
   
-  --border-color: #334155;     /* Crisp Solid Slate Border */
-  --border-hover: #2563eb;     /* Solid Sapphire Blue Hover */
+  --border-color: #2a374d;     /* Crisp Solid Border */
+  --border-hover: #3b82f6;     /* Solid Blue Border Focus */
   
-  --accent-primary: #2563eb;    /* Color 1: Solid Sapphire Blue */
+  --accent-primary: #2563eb;    /* Solid Sapphire Blue */
   --accent-primary-hover: #1d4ed8;
-  --accent-emerald: #059669;    /* Color 2: Solid Emerald Mint */
-  --accent-amber: #d97706;      /* Color 3: Solid Amber Gold */
+  --accent-emerald: #059669;    /* Solid Emerald Mint */
+  --accent-amber: #d97706;      /* Solid Amber Gold */
   --accent-red: #dc2626;
 
   --text-main: #f8fafc;        /* Crisp White Text */
-  --text-muted: #94a3b8;       /* Muted Slate Text */
+  --text-muted: #94a3b8;       /* Slate Text */
   --text-dim: #64748b;
 
   --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -38,67 +38,94 @@ body {
   overflow-x: hidden;
 }
 
-/* Custom Scrollbar */
+/* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--bg-primary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: var(--border-color);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2563eb;
+  background: var(--accent-primary);
 }
 
-/* Card & Panel Styling */
+/* Sleek Card & Panel Styling */
 .glass-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  border-radius: 14px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .glass-card:hover {
   border-color: var(--border-hover);
-  transform: translateY(-2px);
+  background: var(--bg-card-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.45);
 }
 
 .glass-input {
-  background: #0f172a;
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   color: var(--text-main);
   border-radius: 8px;
   padding: 10px 14px;
   font-family: var(--font-body);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .glass-input:focus {
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
 }
 
 /* Animations */
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+.animate-scale-in {
+  animation: modalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-fade-in {
-  animation: fadeIn 0.2s ease-out forwards;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Media Thumbnail Zoom Effect */
+.card-media-wrapper {
+  overflow: hidden;
+  position: relative;
+}
+
+.card-media-img {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover .card-media-img {
+  transform: scale(1.04);
 }
 
 /* Badge Tags */

@@ -137,7 +137,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       justifyContent: 'center',
       padding: '20px'
     }}>
-      <div className="glass-panel" style={{
+      <div className="glass-panel animate-scale-in" style={{
         width: '100%',
         maxWidth: '560px',
         borderRadius: '20px',

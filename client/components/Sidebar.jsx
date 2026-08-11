@@ -29,24 +29,24 @@ export default function Sidebar({
       display: 'flex',
       flexDirection: 'column',
       borderRight: '1px solid var(--border-color)',
-      padding: '20px 16px',
-      gap: '20px',
+      padding: '20px 14px',
+      gap: '18px',
       background: 'var(--bg-secondary)',
       zIndex: 40
     }}>
       {/* Brand Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
             width: '36px',
             height: '36px',
-            borderRadius: '8px',
+            borderRadius: '10px',
             background: 'var(--accent-primary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
-            fontWeight: 'bold'
+            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
           }}>
             <Sparkles size={18} />
           </div>
@@ -59,15 +59,15 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* AI Assistant Solid Button */}
+      {/* AI Assistant Button */}
       <button 
         onClick={onOpenAssistant}
         style={{
           width: '100%',
-          padding: '10px 14px',
-          borderRadius: '8px',
+          padding: '11px 14px',
+          borderRadius: '10px',
           background: 'rgba(37, 99, 235, 0.1)',
-          border: '1px solid var(--accent-primary)',
+          border: '1px solid rgba(37, 99, 235, 0.35)',
           color: '#60a5fa',
           fontWeight: 600,
           fontSize: '13px',
@@ -75,18 +75,24 @@ export default function Sidebar({
           alignItems: 'center',
           gap: '10px',
           cursor: 'pointer',
-          transition: 'all 0.15s ease'
+          transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
-        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.2)'}
-        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.1)'}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.2)';
+          e.currentTarget.style.borderColor = 'var(--accent-primary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.1)';
+          e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.35)';
+        }}
       >
         <Sparkles size={16} color="#3b82f6" />
         <span>Ask Personal Assistant</span>
       </button>
 
       {/* Quick Nav / Views */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '0 6px 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '0 8px 4px' }}>
           Overview
         </p>
 
@@ -106,8 +112,8 @@ export default function Sidebar({
       </div>
 
       {/* Folders Section */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 4px' }}>
           <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
             Folders
           </p>
@@ -121,8 +127,11 @@ export default function Sidebar({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              padding: '2px'
+              padding: '2px',
+              transition: 'transform 0.15s ease'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             <Plus size={16} />
           </button>
@@ -162,7 +171,7 @@ export default function Sidebar({
         <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '0 6px 4px' }}>
           Item Types
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
           <TypeFilterBtn active={activeType === 'all'} onClick={() => onSelectType('all')} label="All" />
           <TypeFilterBtn active={activeType === 'youtube'} onClick={() => onSelectType('youtube')} icon={<Tv size={13} color="#dc2626" />} label="YouTube" />
           <TypeFilterBtn active={activeType === 'image'} onClick={() => onSelectType('image')} icon={<ImageIcon size={13} color="#059669" />} label="Images" />
@@ -185,7 +194,7 @@ export default function Sidebar({
             <div style={{
               width: '32px',
               height: '32px',
-              borderRadius: '6px',
+              borderRadius: '8px',
               background: 'var(--accent-primary)',
               display: 'flex',
               alignItems: 'center',
@@ -214,7 +223,9 @@ export default function Sidebar({
               border: 'none',
               color: 'var(--text-muted)',
               cursor: 'pointer',
-              padding: '6px'
+              padding: '6px',
+              borderRadius: '6px',
+              transition: 'color 0.15s ease'
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = '#dc2626'}
             onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
@@ -238,37 +249,38 @@ function SidebarNavItem({ active, onClick, icon, label, count, isPrivate, color 
         width: '100%',
         padding: '8px 10px',
         borderRadius: '8px',
-        background: active ? 'var(--accent-primary)' : 'transparent',
-        border: '1px solid transparent',
+        background: active ? 'rgba(37, 99, 235, 0.15)' : 'transparent',
+        borderLeft: active ? '3px solid var(--accent-primary)' : '3px solid transparent',
         color: active ? '#fff' : 'var(--text-muted)',
         fontSize: '13px',
         fontWeight: active ? 600 : 500,
         cursor: 'pointer',
-        transition: 'background 0.15s ease'
+        transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
       onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = '#0f172a';
+        if (!active) e.currentTarget.style.background = 'var(--bg-primary)';
       }}
       onMouseLeave={(e) => {
         if (!active) e.currentTarget.style.background = 'transparent';
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', color: active ? '#fff' : (color || 'inherit') }}>
+        <div style={{ display: 'flex', alignItems: 'center', color: active ? 'var(--accent-primary)' : (color || 'inherit') }}>
           {icon}
         </div>
         <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
           {label}
         </span>
-        {isPrivate && <Lock size={12} color={active ? '#fff' : '#059669'} title="Private Folder" />}
+        {isPrivate && <Lock size={12} color="#059669" title="Private Folder" />}
       </div>
       {count !== undefined && (
         <span style={{ 
           fontSize: '11px', 
-          background: active ? 'rgba(255, 255, 255, 0.2)' : '#0f172a', 
+          background: active ? 'rgba(37, 99, 235, 0.3)' : 'var(--bg-primary)', 
           padding: '2px 7px', 
-          borderRadius: '6px',
-          color: active ? '#fff' : 'var(--text-dim)' 
+          borderRadius: '10px',
+          color: active ? '#fff' : 'var(--text-dim)',
+          fontWeight: 600
         }}>
           {count}
         </span>
@@ -288,12 +300,13 @@ function TypeFilterBtn({ active, onClick, icon, label }) {
         gap: '6px',
         padding: '6px 8px',
         borderRadius: '6px',
-        background: active ? 'var(--accent-primary)' : '#0f172a',
+        background: active ? 'var(--accent-primary)' : 'var(--bg-primary)',
         border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
         color: active ? '#fff' : 'var(--text-muted)',
         fontSize: '11px',
         fontWeight: 600,
-        cursor: 'pointer'
+        cursor: 'pointer',
+        transition: 'all 0.15s ease'
       }}
     >
       {icon}
