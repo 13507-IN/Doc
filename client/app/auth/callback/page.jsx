@@ -1,8 +1,8 @@
 'use client';
-import { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function AuthCallbackPage() {
+function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -44,5 +44,25 @@ export default function AuthCallbackPage() {
     }}>
       Completing Google Authentication...
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-muted)',
+        fontSize: '14px'
+      }}>
+        Loading Google Authentication...
+      </div>
+    }>
+      <CallbackContent />
+    </Suspense>
   );
 }
