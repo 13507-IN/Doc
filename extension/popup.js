@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saveForm = document.getElementById('saveForm');
   const loginForm = document.getElementById('loginForm');
   const logoutBtn = document.getElementById('logoutBtn');
+  const syncAuthBtn = document.getElementById('syncAuthBtn');
   const authStatus = document.getElementById('authStatus');
   const userBadge = document.getElementById('userBadge');
   const userName = document.getElementById('userName');
@@ -48,6 +49,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
+  // Manual Sync Auth Button
+  syncAuthBtn.addEventListener('click', () => {
+    if (chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'REQUEST_HOLDER_AUTH_SYNC' }, (response) => {
+            if (chrome.runtime.lastError) {
+              authStatus.textContent = 'Open Holder website tab to auto-sync.';
+              authStatus.className = 'status error';
+            } else if (response && response.token) {
+              authStatus.textContent = '✅ Synced from website!';
+              authStatus.className = 'status success';
+              setTimeout(initAuthCheck, 400);
+            }
+          });
+        }
+      });
+    }
+  });
+
   // Check saved token from chrome.storage.local (synced from web app or manual login)
   function initAuthCheck() {
     chrome.storage.local.get(['holder_token', 'holder_user'], async (result) => {
@@ -66,7 +87,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             showAuthSection();
           }
         } catch (err) {
-          // If offline or network issue, trust local token
+          // If offline or server pending, trust stored local token
           showSaverForm(token, user);
         }
       } else {
@@ -121,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         authStatus.textContent = '✅ Logged in!';
         authStatus.className = 'status success';
-        setTimeout(() => showSaverForm(data.token, data.user), 600);
+        setTimeout(() => showSaverForm(data.token, data.user), 500);
       } else {
         throw new Error(data.message || 'Invalid email or password');
       }
@@ -236,7 +257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (saveData.success) {
           statusDiv.textContent = '✅ Saved to your personal vault!';
           statusDiv.className = 'status success';
-          setTimeout(() => window.close(), 1500);
+          setTimeout(() => window.close(), 1400);
         } else {
           throw new Error(saveData.message || 'Failed to save');
         }

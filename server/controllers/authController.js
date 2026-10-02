@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'holder_jwt_secret_key_13507';
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 
 // Helper to seed default user folders upon signup
 async function seedUserDefaultFolders(userId) {
@@ -49,7 +50,7 @@ exports.register = async (req, res) => {
     res.status(201).json({
       success: true,
       token,
-      user: { id: user._id, name: user.name, email: user.email }
+      user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -70,6 +71,10 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid email or password.' });
     }
 
+    if (!user.password) {
+      return res.status(400).json({ success: false, message: 'This account was created with Google Sign-In. Please click "Continue with Google".' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ success: false, message: 'Invalid email or password.' });
@@ -80,10 +85,27 @@ exports.login = async (req, res) => {
     res.json({
       success: true,
       token,
-      user: { id: user._id, name: user.name, email: user.email }
+      user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Google OAuth Callback Handler
+exports.googleCallback = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.redirect(`${CLIENT_URL}?error=oauth_failed`);
+    }
+
+    const token = jwt.sign({ id: user._id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
+    const userParam = encodeURIComponent(JSON.stringify({ id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }));
+
+    res.redirect(`${CLIENT_URL}/auth/callback?token=${token}&user=${userParam}`);
+  } catch (error) {
+    res.redirect(`${CLIENT_URL}?error=${encodeURIComponent(error.message)}`);
   }
 };
 

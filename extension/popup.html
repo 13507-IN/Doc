@@ -7,7 +7,7 @@
     :root {
       --bg: #0a0c14;
       --card-bg: #121524;
-      --accent: #6366f1;
+      --accent: #2563eb;
       --text: #f8fafc;
       --muted: #94a3b8;
       --border: rgba(255, 255, 255, 0.1);
@@ -36,7 +36,7 @@
       width: 28px;
       height: 28px;
       border-radius: 8px;
-      background: linear-gradient(135deg, #6366f1, #ec4899);
+      background: var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -61,7 +61,7 @@
       width: 100%;
       padding: 10px;
       border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      background: var(--accent);
       color: #fff;
       border: none;
       font-weight: 600;
@@ -92,11 +92,12 @@
     .icon-btn:hover { color: #fff; }
     .user-badge {
       font-size: 11px;
-      color: #a5b4fc;
-      background: rgba(99, 102, 241, 0.15);
-      padding: 2px 8px;
-      border-radius: 10px;
-      margin-bottom: 10px;
+      color: #93c5fd;
+      background: rgba(37, 99, 235, 0.15);
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      padding: 4px 10px;
+      border-radius: 8px;
+      margin-bottom: 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -110,6 +111,7 @@
       <div class="title">Holder Saver</div>
     </div>
     <div class="header-actions">
+      <button id="syncAuthBtn" class="icon-btn" title="Sync Auth with Website">🔄</button>
       <button id="serverConfigBtn" class="icon-btn" title="Server Settings">⚙️</button>
       <button id="logoutBtn" class="icon-btn hidden" title="Log Out">🚪</button>
     </div>
@@ -127,7 +129,7 @@
   <!-- User Sync Badge -->
   <div id="userBadge" class="user-badge hidden">
     <span>Logged in as: <strong id="userName">User</strong></span>
-    <span style="font-size: 9px; color: #10b981;">● Synced</span>
+    <span style="font-size: 9px; color: #10b981; font-weight: bold;">● Synced</span>
   </div>
 
   <!-- Login Section -->

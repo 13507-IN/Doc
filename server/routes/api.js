@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const passport = require('passport');
 const multer = require('multer');
 const path = require('path');
 
@@ -28,6 +29,22 @@ const upload = multer({ storage });
 router.post('/auth/register', authController.register);
 router.post('/auth/login', authController.login);
 router.get('/auth/me', authMiddleware, authController.getMe);
+
+// Google OAuth Passport Routes
+router.get('/auth/google', (req, res, next) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Google OAuth is not configured on the server. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to environment variables.' 
+    });
+  }
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })(req, res, next);
+});
+
+router.get('/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login', session: false }), 
+  authController.googleCallback
+);
 
 // Public Metadata Scraper Route
 router.post('/metadata/extract', metadataController.extractMetadata);

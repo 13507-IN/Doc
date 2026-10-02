@@ -5,6 +5,11 @@ function syncTokenToExtension() {
     const token = localStorage.getItem('holder_token');
     const userStr = localStorage.getItem('holder_user');
 
+    // Tag body so web app knows extension is installed
+    if (document.body) {
+      document.body.setAttribute('data-holder-extension-installed', 'true');
+    }
+
     if (token) {
       chrome.runtime.sendMessage({
         type: 'SYNC_HOLDER_AUTH',
@@ -12,7 +17,7 @@ function syncTokenToExtension() {
         user: userStr ? JSON.parse(userStr) : null
       }, (response) => {
         if (chrome.runtime.lastError) {
-          // Extension popup context not active or listener busy
+          // Extension listener standard fallback
         }
       });
     } else {
@@ -26,9 +31,13 @@ function syncTokenToExtension() {
 }
 
 // Initial sync on page load
-syncTokenToExtension();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', syncTokenToExtension);
+} else {
+  syncTokenToExtension();
+}
 
-// Listen for window postMessage from Web App
+// Listen for window postMessage from Web App (login/logout/Google OAuth)
 window.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'HOLDER_AUTH_TOKEN') {
     if (event.data.token) {
@@ -42,5 +51,20 @@ window.addEventListener('message', (event) => {
         type: 'CLEAR_HOLDER_AUTH'
       });
     }
+  }
+});
+
+// Listen for cross-tab localStorage changes
+window.addEventListener('storage', (event) => {
+  if (event.key === 'holder_token' || event.key === 'holder_user') {
+    syncTokenToExtension();
+  }
+});
+
+// Respond to direct requests from popup script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'REQUEST_HOLDER_AUTH_SYNC') {
+    syncTokenToExtension();
+    sendResponse({ success: true, token: localStorage.getItem('holder_token') });
   }
 });

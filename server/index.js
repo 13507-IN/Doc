@@ -4,7 +4,10 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
+const passport = require('passport');
+const session = require('express-session');
 const { MongoMemoryServer } = require('mongodb-memory-server');
+const configurePassport = require('./config/passport');
 
 dotenv.config();
 
@@ -23,9 +26,21 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
+// Express Session & Passport Middleware
+app.use(
+  session({
+    secret: process.env.JWT_SECRET || 'holder_session_secret_13507',
+    resave: false,
+    saveUninitialized: false
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
+configurePassport();
+
 // Database Readiness Check Middleware
 app.use(async (req, res, next) => {
-  if (req.path === '/health') return next();
+  if (req.path === '/health' || req.path.startsWith('/api/auth/google')) return next();
 
   if (mongoose.connection.readyState === 1) {
     return next();
