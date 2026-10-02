@@ -43,25 +43,26 @@ export default function Home() {
 
   // Initialize Auth on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem('holder_token');
-    const savedUser = localStorage.getItem('holder_user');
+    const timer = window.setTimeout(() => {
+      const savedToken = localStorage.getItem('holder_token');
+      const savedUser = localStorage.getItem('holder_user');
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        if (typeof window !== 'undefined') {
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
           window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: savedToken, user: parsedUser }, '*');
+        } catch (e) {
+          localStorage.removeItem('holder_token');
+          localStorage.removeItem('holder_user');
+          setIsAuthOpen(true);
         }
-      } catch (e) {
-        localStorage.removeItem('holder_token');
-        localStorage.removeItem('holder_user');
+      } else {
         setIsAuthOpen(true);
       }
-    } else {
-      setIsAuthOpen(true);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const handleLoginSuccess = (newToken, newUser) => {
@@ -149,15 +150,15 @@ export default function Home() {
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    if (token) {
-      fetchFolders();
-    }
+    if (!token) return;
+    const timer = window.setTimeout(() => { void fetchFolders(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [token, fetchFolders]);
 
   useEffect(() => {
-    if (token) {
-      fetchItems();
-    }
+    if (!token) return;
+    const timer = window.setTimeout(() => { void fetchItems(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [token, fetchItems]);
 
   const handleToggleFavorite = async (id) => {

@@ -1,5 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const dns = require('dns').promises;
+const net = require('net');
 
 const metadataCache = new Map();
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -19,6 +21,50 @@ function cacheMetadata(url, value) {
     metadataCache.delete(metadataCache.keys().next().value);
   }
   metadataCache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+function isPrivateAddress(address) {
+  if (net.isIP(address) === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    );
+  }
+
+  if (net.isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    if (normalized === '::' || normalized === '::1') return true;
+    if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80')) return true;
+    if (normalized.startsWith('::ffff:')) return isPrivateAddress(normalized.slice(7));
+  }
+
+  return false;
+}
+
+async function assertPublicHttpUrl(parsedUrl) {
+  if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password) {
+    throw new Error('Only public HTTP(S) URLs are supported');
+  }
+
+  const hostname = parsedUrl.hostname;
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    throw new Error('Local network URLs are not supported');
+  }
+
+  const addresses = net.isIP(hostname)
+    ? [{ address: hostname }]
+    : await dns.lookup(hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
+    throw new Error('Local network URLs are not supported');
+  }
 }
 
 // Extract YouTube ID from various YouTube URL formats
@@ -42,8 +88,10 @@ exports.extractMetadata = async (req, res) => {
     } catch {
       return res.status(400).json({ success: false, message: 'A valid URL is required' });
     }
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return res.status(400).json({ success: false, message: 'Only HTTP(S) URLs are supported' });
+    try {
+      await assertPublicHttpUrl(parsedUrl);
+    } catch (error) {
+      return res.status(400).json({ success: false, message: error.message });
     }
     const cached = getCachedMetadata(parsedUrl.href);
     if (cached) return res.json(cached);
@@ -95,7 +143,8 @@ exports.extractMetadata = async (req, res) => {
         },
         timeout: 5000,
         maxContentLength: 1024 * 1024,
-        maxBodyLength: 1024 * 1024
+        maxBodyLength: 1024 * 1024,
+        maxRedirects: 0
       });
 
       const $ = cheerio.load(response.data);

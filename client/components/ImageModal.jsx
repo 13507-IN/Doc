@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { X, ExternalLink, Download } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
 
 export default function ImageModal({ item, onClose }) {
   if (!item) return null;
@@ -40,7 +40,9 @@ export default function ImageModal({ item, onClose }) {
         </div>
 
         {/* Image Display */}
-        <img 
+        {/* Dynamic user-provided URLs cannot be safely whitelisted for next/image. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={imageSrc} 
           alt={item.title} 
           style={{

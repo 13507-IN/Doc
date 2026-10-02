@@ -24,9 +24,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
-    if (defaultFolderId && defaultFolderId !== 'all' && defaultFolderId !== 'uncategorized') {
-      setFolderId(defaultFolderId);
-    }
+    if (!defaultFolderId || defaultFolderId === 'all' || defaultFolderId === 'uncategorized') return;
+    const timer = window.setTimeout(() => setFolderId(defaultFolderId), 0);
+    return () => window.clearTimeout(timer);
   }, [defaultFolderId, isOpen]);
 
   // Handle URL change & auto extract metadata

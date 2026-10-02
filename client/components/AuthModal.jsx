@@ -42,6 +42,8 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
   };
 
   const handleGoogleSignIn = () => {
+    // OAuth starts on the separately deployed Express API, not an internal Next.js route.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `${API_BASE}/auth/google`;
   };
 
