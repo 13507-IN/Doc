@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
@@ -27,6 +27,9 @@ export default function Home() {
   const [activeType, setActiveType] = useState('all');
   const [activeTab, setActiveTab] = useState('all'); // all | favorites
   const [searchQuery, setSearchQuery] = useState('');
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
 
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
@@ -36,6 +39,7 @@ export default function Home() {
   const [activeImageItem, setActiveImageItem] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const requestControllerRef = useRef(null);
 
   // Initialize Auth on mount
   useEffect(() => {
@@ -103,31 +107,46 @@ export default function Home() {
   }, [token]);
 
   // Fetch Items
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async ({ append = false, cursor = null } = {}) => {
     if (!token) return;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     try {
       setLoading(true);
-      const params = {};
+      const params = { limit: 30 };
       if (activeFolder !== 'all') params.folderId = activeFolder;
       if (activeType !== 'all') params.type = activeType;
       if (activeTab === 'favorites') params.isFavorite = 'true';
-      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (appliedSearchQuery.trim()) params.search = appliedSearchQuery.trim();
+      if (cursor) params.cursor = cursor;
 
       const res = await axios.get(`${API_BASE}/items`, {
         params,
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal
       });
       if (res.data.success) {
-        setItems(res.data.items);
+        setItems((current) => append ? [...current, ...res.data.items] : res.data.items);
+        setHasMore(Boolean(res.data.page?.hasMore));
+        setNextCursor(res.data.page?.nextCursor || null);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       if (err.response?.status === 401) {
         handleLogout();
       }
     } finally {
-      setLoading(false);
+      if (requestControllerRef.current === controller) setLoading(false);
     }
-  }, [token, activeFolder, activeType, activeTab, searchQuery]);
+  }, [token, activeFolder, activeType, activeTab, appliedSearchQuery]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAppliedSearchQuery(searchQuery), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
     if (token) {
@@ -147,7 +166,9 @@ export default function Home() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.success) {
-        fetchItems();
+        setItems((current) => current
+          .map((item) => item._id === id ? { ...item, isFavorite: res.data.item.isFavorite } : item)
+          .filter((item) => activeTab !== 'favorites' || item.isFavorite));
       }
     } catch (err) {
       console.error('Error toggling favorite:', err);
@@ -160,7 +181,9 @@ export default function Home() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.success) {
-        fetchItems();
+        setItems((current) => current
+          .map((item) => item._id === id ? { ...item, pinned: res.data.item.pinned } : item)
+          .sort((a, b) => Number(b.pinned) - Number(a.pinned)));
       }
     } catch (err) {
       console.error('Error toggling pin:', err);
@@ -272,7 +295,7 @@ export default function Home() {
           )}
 
           {/* Grid Layout */}
-          {loading ? (
+          {loading && items.length === 0 ? (
             <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
               Loading your info vault...
             </div>
@@ -328,23 +351,43 @@ export default function Home() {
               </button>
             </div>
           ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
-              gap: '20px'
-            }}>
-              {items.map((item) => (
-                <ItemCard 
-                  key={item._id}
-                  item={item}
-                  onPlayYouTube={(item) => setActiveYouTubeItem(item)}
-                  onViewImage={(item) => setActiveImageItem(item)}
-                  onToggleFavorite={handleToggleFavorite}
-                  onTogglePin={handleTogglePin}
-                  onDeleteItem={handleDeleteItem}
-                />
-              ))}
-            </div>
+            <>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+                gap: '20px'
+              }}>
+                {items.map((item) => (
+                  <ItemCard
+                    key={item._id}
+                    item={item}
+                    onPlayYouTube={(item) => setActiveYouTubeItem(item)}
+                    onViewImage={(item) => setActiveImageItem(item)}
+                    onToggleFavorite={handleToggleFavorite}
+                    onTogglePin={handleTogglePin}
+                    onDeleteItem={handleDeleteItem}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 0 8px' }}>
+                  <button
+                    onClick={() => fetchItems({ append: true, cursor: nextCursor })}
+                    disabled={loading}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-secondary)',
+                      color: '#fff',
+                      cursor: loading ? 'wait' : 'pointer'
+                    }}
+                  >
+                    {loading ? 'Loading…' : 'Load more'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

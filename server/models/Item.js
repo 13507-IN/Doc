@@ -69,5 +69,9 @@ itemSchema.pre('save', function(next) {
 });
 
 itemSchema.index({ userId: 1, title: 'text', content: 'text', tags: 'text', url: 'text' });
+itemSchema.index({ userId: 1, pinned: -1, createdAt: -1, _id: -1 });
+itemSchema.index({ userId: 1, folderId: 1, pinned: -1, createdAt: -1, _id: -1 });
+itemSchema.index({ userId: 1, type: 1, pinned: -1, createdAt: -1, _id: -1 });
+itemSchema.index({ userId: 1, isFavorite: 1, pinned: -1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model('Item', itemSchema);

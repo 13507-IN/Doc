@@ -70,6 +70,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
 
       if (res.data.success) {
         setPreviewUrl(res.data.imageUrl);
+        setMetadata((current) => ({
+          ...current,
+          cloudinaryPublicId: res.data.cloudinaryPublicId
+        }));
         if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ""));
       }
     } catch (err) {

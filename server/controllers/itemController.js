@@ -1,10 +1,39 @@
 const Item = require('../models/Item');
+const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
+
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 100;
+
+function decodeCursor(cursor) {
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (
+      typeof decoded.pinned !== 'boolean' ||
+      !decoded.createdAt ||
+      !decoded.id
+    ) {
+      return null;
+    }
+    return { ...decoded, createdAt: new Date(decoded.createdAt) };
+  } catch {
+    return null;
+  }
+}
+
+function encodeCursor(item) {
+  return Buffer.from(JSON.stringify({
+    pinned: item.pinned,
+    createdAt: item.createdAt,
+    id: item._id.toString()
+  })).toString('base64url');
+}
 
 // Get items scoped to authenticated user
 exports.getItems = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { folderId, type, search, isFavorite, tag } = req.query;
+    const { folderId, type, search, isFavorite, tag, cursor } = req.query;
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
     const query = { userId };
 
@@ -28,24 +57,40 @@ exports.getItems = async (req, res) => {
       query.tags = tag;
     }
 
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      query.$or = [
-        { title: searchRegex },
-        { content: searchRegex },
-        { tags: searchRegex },
-        { url: searchRegex }
-      ];
+    if (search?.trim()) {
+      query.$text = { $search: search.trim() };
+    }
+
+    const decodedCursor = cursor ? decodeCursor(cursor) : null;
+    if (cursor && !decodedCursor) {
+      return res.status(400).json({ success: false, message: 'Invalid pagination cursor' });
+    }
+    if (decodedCursor) {
+      query.$and = [{
+        $or: [
+          { pinned: { $lt: decodedCursor.pinned } },
+          { pinned: decodedCursor.pinned, createdAt: { $lt: decodedCursor.createdAt } },
+          { pinned: decodedCursor.pinned, createdAt: decodedCursor.createdAt, _id: { $lt: decodedCursor.id } }
+        ]
+      }];
     }
 
     const items = await Item.find(query)
       .populate('folderId', 'name icon color')
-      .sort({ pinned: -1, createdAt: -1 });
+      .sort({ pinned: -1, createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .lean();
+    const hasMore = items.length > limit;
+    const pageItems = hasMore ? items.slice(0, limit) : items;
 
     res.json({
       success: true,
-      count: items.length,
-      items
+      count: pageItems.length,
+      items: pageItems,
+      page: {
+        hasMore,
+        nextCursor: hasMore ? encodeCursor(pageItems.at(-1)) : null
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -136,12 +181,14 @@ exports.updateItem = async (req, res) => {
 exports.toggleFavorite = async (req, res) => {
   try {
     const userId = req.user.id;
-    const item = await Item.findOne({ _id: req.params.id, userId });
+    const item = await Item.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      [{ $set: { isFavorite: { $not: '$isFavorite' }, updatedAt: '$$NOW' } }],
+      { new: true }
+    );
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    item.isFavorite = !item.isFavorite;
-    await item.save();
     res.json({ success: true, item });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -152,12 +199,14 @@ exports.toggleFavorite = async (req, res) => {
 exports.togglePin = async (req, res) => {
   try {
     const userId = req.user.id;
-    const item = await Item.findOne({ _id: req.params.id, userId });
+    const item = await Item.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      [{ $set: { pinned: { $not: '$pinned' }, updatedAt: '$$NOW' } }],
+      { new: true }
+    );
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    item.pinned = !item.pinned;
-    await item.save();
     res.json({ success: true, item });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -172,6 +221,12 @@ exports.deleteItem = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
+    const publicId = item.metadata?.cloudinaryPublicId;
+    if (publicId && cloudinaryConfigured) {
+      cloudinary.uploader.destroy(publicId).catch((error) => {
+        console.warn(`Unable to remove Cloudinary asset ${publicId}:`, error.message);
+      });
+    }
     res.json({ success: true, message: 'Item deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -185,14 +240,31 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No image file uploaded' });
     }
 
-    const host = req.get('host');
-    const protocol = req.protocol;
-    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    if (!cloudinaryConfigured) {
+      return res.status(503).json({
+        success: false,
+        message: 'Image storage is not configured. Add Cloudinary credentials to the server environment.'
+      });
+    }
+
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `holder/${req.user.id}`,
+          resource_type: 'image',
+          allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+          transformation: [{ width: 2400, height: 2400, crop: 'limit' }]
+        },
+        (error, uploadResult) => error ? reject(error) : resolve(uploadResult)
+      );
+      stream.end(req.file.buffer);
+    });
 
     res.json({
       success: true,
-      imageUrl,
-      filename: req.file.filename
+      imageUrl: result.secure_url,
+      filename: req.file.originalname,
+      cloudinaryPublicId: result.public_id
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

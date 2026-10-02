@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tagsInput = document.getElementById('tags');
   const notesInput = document.getElementById('notes');
   const statusDiv = document.getElementById('status');
+  const saveScreenshotBtn = document.getElementById('saveScreenshotBtn');
 
   // Load configured API Server URL from chrome.storage.local
   chrome.storage.local.get(['holder_server_url'], (res) => {
@@ -266,5 +267,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusDiv.className = 'status error';
       }
     });
+  });
+
+  // Capture the visible tab only after an explicit user click, then store it as an image item.
+  saveScreenshotBtn.addEventListener('click', async () => {
+    statusDiv.textContent = 'Capturing screenshot...';
+    statusDiv.className = 'status';
+    saveScreenshotBtn.disabled = true;
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+      const imageBlob = await (await fetch(dataUrl)).blob();
+      const fileName = `screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+      const formData = new FormData();
+      formData.append('image', imageBlob, fileName);
+
+      const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
+      if (!token) throw new Error('Please sign in before saving a screenshot');
+
+      const uploadResponse = await fetch(`${API_BASE}/items/upload-image`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok || !uploadData.success) {
+        throw new Error(uploadData.message || 'Screenshot upload failed');
+      }
+
+      const itemResponse = await fetch(`${API_BASE}/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: `Screenshot — ${tab.title || new Date().toLocaleString()}`,
+          type: 'image',
+          url: tab.url || '',
+          content: notesInput.value,
+          folderId: folderSelect.value || null,
+          previewUrl: uploadData.imageUrl,
+          metadata: { cloudinaryPublicId: uploadData.cloudinaryPublicId },
+          tags: [...new Set([
+            'screenshot',
+            ...tagsInput.value.split(',').map((tag) => tag.trim()).filter(Boolean)
+          ])]
+        })
+      });
+      const itemData = await itemResponse.json();
+      if (!itemResponse.ok || !itemData.success) {
+        throw new Error(itemData.message || 'Could not save the screenshot');
+      }
+
+      statusDiv.textContent = '✅ Screenshot saved to your vault!';
+      statusDiv.className = 'status success';
+      setTimeout(() => window.close(), 1200);
+    } catch (err) {
+      statusDiv.textContent = `❌ ${err.message}`;
+      statusDiv.className = 'status error';
+    } finally {
+      saveScreenshotBtn.disabled = false;
+    }
   });
 });

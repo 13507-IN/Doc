@@ -52,6 +52,13 @@ npm start
 ```
 *Backend API will run on http://localhost:5000.*
 
+#### Cloudinary image storage
+
+Copy `server/.env.example` to `server/.env`, then set `CLOUDINARY_URL` with
+the value from your Cloudinary console. Image uploads and extension screenshots
+are stored in Cloudinary; the app saves the secure delivery URL and asset ID
+with each vault item.
+
 ### 2. Frontend Web App (`/client`)
 ```bash
 cd client

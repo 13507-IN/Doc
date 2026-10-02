@@ -11,8 +11,7 @@ exports.queryAssistant = async (req, res) => {
     }
 
     const cleanQuery = query.toLowerCase().trim();
-    const allItems = await Item.find({ userId }).populate('folderId', 'name icon color');
-    const allFolders = await Folder.find({ userId });
+    const allFolders = await Folder.find({ userId }).lean();
 
     let matchedItems = [];
     let assistantMessage = '';
@@ -32,37 +31,28 @@ exports.queryAssistant = async (req, res) => {
       categoryDetected = 'note';
     }
 
-    // Filter matching items
-    matchedItems = allItems.filter(item => {
-      let matches = true;
+    const itemQuery = { userId };
+    if (targetFolder) itemQuery.folderId = targetFolder._id;
+    if (categoryDetected) itemQuery.type = categoryDetected;
 
-      if (targetFolder) {
-        matches = matches && (item.folderId && item.folderId._id.toString() === targetFolder._id.toString());
-      }
+    const ignoredTerms = new Set([
+      'find', 'get', 'show', 'my', 'me', 'all', 'important', 'everything',
+      'anything', 'folder', 'folders', 'item', 'items', 'youtube', 'video',
+      'videos', 'image', 'images', 'photo', 'picture', 'link', 'links',
+      'website', 'url', 'note', 'notes', 'code', 'text',
+      ...(targetFolder ? targetFolder.name.toLowerCase().split(/\W+/) : [])
+    ]);
+    const keywords = cleanQuery
+      .split(/\W+/)
+      .filter((term) => term.length > 2 && !ignoredTerms.has(term))
+      .join(' ');
+    if (keywords.length > 2) itemQuery.$text = { $search: keywords };
 
-      if (categoryDetected) {
-        matches = matches && item.type === categoryDetected;
-      }
-
-      const keywords = cleanQuery
-        .replace(/find|get|show|my|me|all|important|everything|anything|folder|items|videos|links|notes|images/gi, '')
-        .trim();
-
-      if (keywords.length > 2) {
-        const itemText = `${item.title} ${item.content} ${item.url} ${item.tags.join(' ')}`.toLowerCase();
-        matches = matches && itemText.includes(keywords);
-      }
-
-      return matches;
-    });
-
-    if (matchedItems.length === 0 && cleanQuery.length > 0) {
-      const searchTerms = cleanQuery.split(' ').filter(w => w.length > 2);
-      matchedItems = allItems.filter(item => {
-        const itemText = `${item.title} ${item.content} ${item.url} ${item.tags.join(' ')}`.toLowerCase();
-        return searchTerms.some(term => itemText.includes(term));
-      });
-    }
+    matchedItems = await Item.find(itemQuery)
+      .populate('folderId', 'name icon color')
+      .sort({ pinned: -1, createdAt: -1 })
+      .limit(20)
+      .lean();
 
     const totalCount = matchedItems.length;
 
@@ -80,7 +70,7 @@ exports.queryAssistant = async (req, res) => {
       query,
       answer: assistantMessage,
       count: totalCount,
-      matchedItems: matchedItems.slice(0, 20),
+      matchedItems,
       targetFolder: targetFolder ? { id: targetFolder._id, name: targetFolder.name } : null
     });
 

@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const passport = require('passport');
 const multer = require('multer');
-const path = require('path');
 
 const authController = require('../controllers/authController');
 const folderController = require('../controllers/folderController');
@@ -12,18 +11,16 @@ const assistantController = require('../controllers/assistantController');
 const authMiddleware = require('../middleware/auth');
 
 // Multer Storage Configuration for Image Uploads
-const uploadsDir = path.join(__dirname, '../uploads');
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'img-' + uniqueSuffix + ext);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
+    }
+    cb(null, true);
   }
 });
-const upload = multer({ storage });
 
 // Public Auth Routes
 router.post('/auth/register', authController.register);

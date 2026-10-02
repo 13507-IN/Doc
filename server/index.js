@@ -46,15 +46,6 @@ app.use(async (req, res, next) => {
     return next();
   }
 
-  if (mongoose.connection.readyState === 2) {
-    let checkAttempts = 0;
-    while (mongoose.connection.readyState === 2 && checkAttempts < 15) {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      checkAttempts++;
-    }
-    if (mongoose.connection.readyState === 1) return next();
-  }
-
   return res.status(503).json({
     success: false,
     message: 'Database is connecting or unavailable. Please ensure MongoDB Atlas Network Access is set to allow connections (0.0.0.0/0).'

@@ -5,19 +5,24 @@ const Item = require('../models/Item');
 exports.getFolders = async (req, res) => {
   try {
     const userId = req.user.id;
-    const folders = await Folder.find({ userId }).sort({ createdAt: -1 });
-    
-    // Get item counts for each folder
-    const foldersWithCount = await Promise.all(folders.map(async (folder) => {
-      const itemCount = await Item.countDocuments({ userId, folderId: folder._id });
-      return {
-        ...folder.toObject(),
-        itemCount
-      };
-    }));
+    const [folders, itemCounts] = await Promise.all([
+      Folder.find({ userId }).sort({ createdAt: -1 }).lean(),
+      Item.aggregate([
+        { $match: { userId: new (require('mongoose').Types.ObjectId)(userId) } },
+        { $group: { _id: '$folderId', itemCount: { $sum: 1 } } }
+      ])
+    ]);
 
-    // Get count of uncategorized items
-    const uncategorizedCount = await Item.countDocuments({ userId, folderId: null });
+    const countByFolder = new Map(
+      itemCounts
+        .filter(({ _id }) => _id !== null)
+        .map(({ _id, itemCount }) => [_id.toString(), itemCount])
+    );
+    const uncategorizedCount = itemCounts.find(({ _id }) => _id === null)?.itemCount || 0;
+    const foldersWithCount = folders.map((folder) => ({
+      ...folder,
+      itemCount: countByFolder.get(folder._id.toString()) || 0
+    }));
 
     res.json({
       success: true,
