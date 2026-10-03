@@ -8,6 +8,7 @@ const folderController = require('../controllers/folderController');
 const itemController = require('../controllers/itemController');
 const metadataController = require('../controllers/metadataController');
 const assistantController = require('../controllers/assistantController');
+const profileController = require('../controllers/profileController');
 const authMiddleware = require('../middleware/auth');
 
 // Multer Storage Configuration for Image Uploads
@@ -61,6 +62,12 @@ router.delete('/items/:id', authMiddleware, itemController.deleteItem);
 router.patch('/items/:id/favorite', authMiddleware, itemController.toggleFavorite);
 router.patch('/items/:id/pin', authMiddleware, itemController.togglePin);
 router.post('/items/upload-image', authMiddleware, upload.single('image'), itemController.uploadImage);
+
+// Saved form profiles
+router.get('/profiles', authMiddleware, profileController.getProfiles);
+router.post('/profiles', authMiddleware, profileController.createProfile);
+router.put('/profiles/:id', authMiddleware, profileController.updateProfile);
+router.delete('/profiles/:id', authMiddleware, profileController.deleteProfile);
 
 // Protected AI Assistant Query Route
 router.post('/assistant/query', authMiddleware, assistantController.queryAssistant);

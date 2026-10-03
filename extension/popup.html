@@ -56,6 +56,10 @@
       font-size: 12px;
       outline: none;
     }
+    select option {
+      background-color: var(--card-bg);
+      color: var(--text);
+    }
     input:focus, select:focus, textarea:focus { border-color: var(--accent); }
     .btn {
       width: 100%;
@@ -114,6 +118,7 @@
       <button id="syncAuthBtn" class="icon-btn" title="Sync Auth with Website">🔄</button>
       <button id="serverConfigBtn" class="icon-btn" title="Server Settings">⚙️</button>
       <button id="logoutBtn" class="icon-btn hidden" title="Log Out">🚪</button>
+      <button id="openDashboardBtn" class="icon-btn" title="Open Holder Dashboard">↗</button>
     </div>
   </div>
 
@@ -179,6 +184,16 @@
     <div class="form-group">
       <label for="notes">Notes / Comments</label>
       <textarea id="notes" rows="2" placeholder="Add quick notes..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="profileSelect">Form Fill Profile</label>
+      <select id="profileSelect"><option value="">Choose a saved form profile…</option></select>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button type="button" class="btn" id="previewFillBtn" style="margin:0; background:#475569;">Preview Fill</button>
+        <button type="button" class="btn" id="applyFillBtn" disabled style="margin:0; background:#059669;">Apply Approved Fill</button>
+      </div>
+      <button type="button" class="btn" id="createProfileBtn" style="margin-top:8px; background:#7c3aed;">Create Profile</button>
     </div>
 
     <button type="submit" class="btn" id="saveBtn">Save to Vault</button>

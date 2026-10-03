@@ -67,4 +67,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     syncTokenToExtension();
     sendResponse({ success: true, token: localStorage.getItem('holder_token') });
   }
+
+  if (request.type === 'GET_SMART_CLIP') {
+    const description = document.querySelector('meta[name="description"], meta[property="og:description"]')?.content || '';
+    const keywords = document.querySelector('meta[name="keywords"]')?.content || '';
+    sendResponse({
+      title: document.title,
+      description,
+      keywords: keywords.split(',').map((keyword) => keyword.trim()).filter(Boolean),
+      selectedText: window.getSelection()?.toString().trim().slice(0, 2000) || ''
+    });
+  }
+
+  if (request.type === 'PREVIEW_PROFILE_FILL' || request.type === 'FILL_PROFILE') {
+    const profile = request.profile || {};
+    const controls = [...document.querySelectorAll('input:not([type="hidden"]):not([type="password"]), textarea, select')];
+    const normalized = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mappings = controls.map((control) => {
+      const label = document.querySelector(`label[for="${control.id}"]`)?.innerText || '';
+      const key = normalized(`${control.name} ${control.id} ${control.placeholder} ${label}`);
+      const entry = Object.entries(profile).find(([profileKey]) => key.includes(normalized(profileKey)));
+      return entry ? { selector: control.id ? `#${CSS.escape(control.id)}` : null, name: control.name, label: label || control.name || control.placeholder, value: entry[1] } : null;
+    }).filter(Boolean);
+    if (request.type === 'FILL_PROFILE') {
+      mappings.forEach((mapping) => {
+        const control = mapping.selector ? document.querySelector(mapping.selector) : controls.find((candidate) => candidate.name === mapping.name);
+        if (!control) return;
+        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), 'value')?.set;
+        setter?.call(control, mapping.value);
+        control.dispatchEvent(new Event('input', { bubbles: true }));
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    sendResponse({ mappings, filled: request.type === 'FILL_PROFILE' ? mappings.length : 0 });
+  }
 });

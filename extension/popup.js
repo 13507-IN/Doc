@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const serverConfigSection = document.getElementById('serverConfigSection');
   const serverUrlInput = document.getElementById('serverUrlInput');
   const saveServerUrlBtn = document.getElementById('saveServerUrlBtn');
+  const openDashboardBtn = document.getElementById('openDashboardBtn');
 
   const titleInput = document.getElementById('title');
   const urlInput = document.getElementById('url');
@@ -22,6 +23,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const notesInput = document.getElementById('notes');
   const statusDiv = document.getElementById('status');
   const saveScreenshotBtn = document.getElementById('saveScreenshotBtn');
+  const profileSelect = document.getElementById('profileSelect');
+  const previewFillBtn = document.getElementById('previewFillBtn');
+  const applyFillBtn = document.getElementById('applyFillBtn');
+  const createProfileBtn = document.getElementById('createProfileBtn');
+  let profileMappings = [];
 
   // Load configured API Server URL from chrome.storage.local
   chrome.storage.local.get(['holder_server_url'], (res) => {
@@ -30,6 +36,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     serverUrlInput.value = API_BASE;
     initAuthCheck();
+  });
+
+  openDashboardBtn.addEventListener('click', async () => {
+    const holderTabs = await chrome.tabs.query({ url: ['http://localhost:3000/*', 'https://*.vercel.app/*'] });
+    if (holderTabs[0]?.id) {
+      await chrome.tabs.update(holderTabs[0].id, { active: true });
+      return;
+    }
+    chrome.tabs.create({ url: 'http://localhost:3000' });
   });
 
   // Toggle Server Settings
@@ -117,7 +132,79 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     loadFoldersAndTab(token);
+    loadProfiles(token);
   }
+
+  async function loadProfiles(token) {
+    try {
+      const response = await fetch(`${API_BASE}/profiles`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      profileSelect.innerHTML = '<option value="">Choose a saved form profile…</option>';
+      (data.profiles || []).forEach((profile) => {
+        const option = document.createElement('option');
+        option.value = profile._id;
+        option.textContent = `${profile.name} (${profile.category})`;
+        option.dataset.fields = JSON.stringify(profile.fields || {});
+        profileSelect.appendChild(option);
+      });
+    } catch {}
+  }
+
+  async function requestFormFill(type) {
+    const option = profileSelect.options[profileSelect.selectedIndex];
+    if (!option?.value) throw new Error('Choose a profile first');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return chrome.tabs.sendMessage(tab.id, { type, profile: JSON.parse(option.dataset.fields || '{}') });
+  }
+
+  previewFillBtn.addEventListener('click', async () => {
+    try {
+      const response = await requestFormFill('PREVIEW_PROFILE_FILL');
+      profileMappings = response.mappings || [];
+      statusDiv.textContent = profileMappings.length ? `Preview: ${profileMappings.length} fields will be filled. Click Apply to approve.` : 'No matching form fields found.';
+      statusDiv.className = 'status';
+      applyFillBtn.disabled = !profileMappings.length;
+    } catch (error) {
+      statusDiv.textContent = `❌ ${error.message}`;
+      statusDiv.className = 'status error';
+    }
+  });
+
+  applyFillBtn.addEventListener('click', async () => {
+    try {
+      if (!profileMappings.length) throw new Error('Preview the form fill first');
+      const response = await requestFormFill('FILL_PROFILE');
+      statusDiv.textContent = `✅ Filled ${response.filled} fields. Nothing was submitted.`;
+      statusDiv.className = 'status success';
+    } catch (error) {
+      statusDiv.textContent = `❌ ${error.message}`;
+      statusDiv.className = 'status error';
+    }
+  });
+
+  createProfileBtn.addEventListener('click', async () => {
+    const name = window.prompt('Profile name (for example: Personal Address)');
+    if (!name) return;
+    const fieldsText = window.prompt('Enter fields as JSON, for example: {"first name":"Asha","email":"asha@example.com","city":"Mumbai"}');
+    if (!fieldsText) return;
+    try {
+      const fields = JSON.parse(fieldsText);
+      const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
+      const response = await fetch(`${API_BASE}/profiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, category: 'personal', fields })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not save profile');
+      await loadProfiles(token);
+      statusDiv.textContent = '✅ Profile saved.';
+      statusDiv.className = 'status success';
+    } catch (error) {
+      statusDiv.textContent = `❌ ${error.message || 'Use valid JSON for the fields.'}`;
+      statusDiv.className = 'status error';
+    }
+  });
 
   // Handle Manual Login inside Popup
   loginForm.addEventListener('submit', async (e) => {
@@ -221,6 +308,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         let previewUrl = '';
         let metadata = {};
+        let smartClip = {};
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          smartClip = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SMART_CLIP' });
+        } catch {}
         try {
           const metaRes = await fetch(`${API_BASE}/metadata/extract`, {
             method: 'POST',
@@ -238,11 +330,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           title: titleInput.value,
           type: type,
           url: url,
-          content: notesInput.value,
+          content: [notesInput.value, smartClip.selectedText, smartClip.description].filter(Boolean).join('\n\n'),
           folderId: folderSelect.value || null,
           previewUrl: previewUrl,
-          metadata: metadata,
-          tags: tagsInput.value.split(',').map(t => t.trim()).filter(Boolean)
+          metadata: { ...metadata, smartClip },
+          tags: [...new Set([...tagsInput.value.split(',').map(t => t.trim()).filter(Boolean), ...(smartClip.keywords || [])])].slice(0, 12)
         };
 
         const saveRes = await fetch(`${API_BASE}/items`, {

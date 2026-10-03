@@ -8,7 +8,7 @@ import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, token }) {
+export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, editingItem, token }) {
   const [activeTab, setActiveTab] = useState('youtube'); // youtube | image | link | note
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -18,16 +18,54 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [isPrivate, setIsPrivate] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
   const [metadata, setMetadata] = useState({});
+  const [expiresAt, setExpiresAt] = useState('');
+  const [reminderDays, setReminderDays] = useState(30);
+  const [ocrText, setOcrText] = useState('');
 
   const [loadingMetadata, setLoadingMetadata] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  const isEditing = Boolean(editingItem);
+
   useEffect(() => {
-    if (!defaultFolderId || defaultFolderId === 'all' || defaultFolderId === 'uncategorized') return;
-    const timer = window.setTimeout(() => setFolderId(defaultFolderId), 0);
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
+      if (editingItem) {
+        setActiveTab(editingItem.type);
+        setUrl(editingItem.url || '');
+        setTitle(editingItem.title || '');
+        setContent(editingItem.content || '');
+        setTags((editingItem.tags || []).join(', '));
+        setFolderId(editingItem.folderId?._id || editingItem.folderId || '');
+        setIsPrivate(Boolean(editingItem.isPrivate));
+        setPreviewUrl(editingItem.previewUrl || '');
+        setMetadata(editingItem.metadata || {});
+        setExpiresAt(editingItem.expiresAt ? editingItem.expiresAt.slice(0, 10) : '');
+        setReminderDays(editingItem.reminderDays ?? 30);
+        setOcrText(editingItem.ocrText || '');
+        return;
+      }
+
+      setActiveTab('youtube');
+      setUrl('');
+      setTitle('');
+      setContent('');
+      setTags('');
+      setFolderId(
+        defaultFolderId && defaultFolderId !== 'all' && defaultFolderId !== 'uncategorized'
+          ? defaultFolderId
+          : ''
+      );
+      setIsPrivate(false);
+      setPreviewUrl('');
+      setMetadata({});
+      setExpiresAt('');
+      setReminderDays(30);
+      setOcrText('');
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [defaultFolderId, isOpen]);
+  }, [defaultFolderId, editingItem, isOpen]);
 
   // Handle URL change & auto extract metadata
   const handleUrlBlur = async () => {
@@ -61,7 +99,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       const formData = new FormData();
       formData.append('image', file);
 
-      const res = await axios.post(`${API_BASE}/items/upload-image`, formData, {
+      const res = await axios.post(`${API_BASE}/items/upload-image?ocr=true`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
@@ -74,6 +112,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           ...current,
           cloudinaryPublicId: res.data.cloudinaryPublicId
         }));
+        setOcrText(res.data.ocrText || '');
         if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ""));
       }
     } catch (err) {
@@ -99,12 +138,20 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         folderId: folderId || null,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         isPrivate,
-        metadata
+        metadata,
+        expiresAt: expiresAt || null,
+        reminderDays: Number(reminderDays) || 30,
+        ocrText
       };
 
-      const res = await axios.post(`${API_BASE}/items`, payload, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const request = isEditing
+        ? axios.put(`${API_BASE}/items/${editingItem._id}`, payload, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        : axios.post(`${API_BASE}/items`, payload, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+      const res = await request;
 
       if (res.data.success) {
         onItemAdded(res.data.item);
@@ -157,7 +204,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           justifyContent: 'space-between'
         }}>
           <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
-            Save New Item to Holder
+            {isEditing ? 'Edit Vault Item' : 'Save New Item to Holder'}
           </h2>
           <button 
             onClick={onClose}
@@ -176,25 +223,25 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         }}>
           <TabBtn 
             active={activeTab === 'youtube'} 
-            onClick={() => { setActiveTab('youtube'); handleReset(); }} 
+            onClick={() => { setActiveTab('youtube'); if (!isEditing) handleReset(); }}
             icon={<Tv size={16} color="#ef4444" />} 
             label="YouTube" 
           />
           <TabBtn 
             active={activeTab === 'image'} 
-            onClick={() => { setActiveTab('image'); handleReset(); }} 
+            onClick={() => { setActiveTab('image'); if (!isEditing) handleReset(); }}
             icon={<ImageIcon size={16} color="#10b981" />} 
             label="Image" 
           />
           <TabBtn 
             active={activeTab === 'link'} 
-            onClick={() => { setActiveTab('link'); handleReset(); }} 
+            onClick={() => { setActiveTab('link'); if (!isEditing) handleReset(); }}
             icon={<LinkIcon size={16} color="#3b82f6" />} 
             label="Web Link" 
           />
           <TabBtn 
             active={activeTab === 'note'} 
-            onClick={() => { setActiveTab('note'); handleReset(); }} 
+            onClick={() => { setActiveTab('note'); if (!isEditing) handleReset(); }}
             icon={<FileText size={16} color="#f59e0b" />} 
             label="Note" 
           />
@@ -239,7 +286,14 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                 <input 
                   type="url"
                   value={previewUrl}
-                  onChange={(e) => setPreviewUrl(e.target.value)}
+                  onChange={(e) => {
+                    setPreviewUrl(e.target.value);
+                    setMetadata((current) => {
+                      const next = { ...current };
+                      delete next.cloudinaryPublicId;
+                      return next;
+                    });
+                  }}
                   placeholder="https://images.unsplash.com/..."
                   className="glass-input"
                   style={{ flex: 1 }}
@@ -311,9 +365,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                 className="glass-input"
                 style={{ width: '100%', cursor: 'pointer' }}
               >
-                <option value="" style={{ background: '#121524' }}>📁 Uncategorized</option>
+                <option value="" style={{ background: '#121524', color: '#f8fafc' }}>📁 Uncategorized</option>
                 {folders.map(f => (
-                  <option key={f._id} value={f._id} style={{ background: '#121524' }}>
+                  <option key={f._id} value={f._id} style={{ background: '#121524', color: '#f8fafc' }}>
                     {f.icon || '📁'} {f.name}
                   </option>
                 ))}
@@ -350,6 +404,17 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
             </label>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Expiry date</label>
+              <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="glass-input" style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Alert days</label>
+              <input type="number" min="0" max="365" value={reminderDays} onChange={(e) => setReminderDays(e.target.value)} className="glass-input" style={{ width: '100%' }} />
+            </div>
+          </div>
+
           {/* Submit */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
             <button 
@@ -380,7 +445,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                 boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
               }}
             >
-              {submitting ? 'Saving...' : 'Save to Vault'}
+              {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Save to Vault'}
             </button>
           </div>
         </form>

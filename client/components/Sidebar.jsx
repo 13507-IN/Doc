@@ -19,6 +19,10 @@ export default function Sidebar({
   user,
   onLogout
 }) {
+  const visibleFolders = activeFolder === 'all'
+    ? folders
+    : folders.filter((folder) => folder._id === activeFolder);
+
   return (
     <aside style={{
       width: '270px',
@@ -144,7 +148,7 @@ export default function Sidebar({
           label="All Folders"
         />
 
-        {folders.map((folder) => (
+        {visibleFolders.map((folder) => (
           <SidebarNavItem 
             key={folder._id}
             active={activeFolder === folder._id}

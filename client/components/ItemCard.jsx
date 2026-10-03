@@ -1,8 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { 
-  Play, ExternalLink, Copy, Check, Star, Pin, Trash2, 
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText
+  Play, ExternalLink, Copy, Check, Star, Pin, Pencil, Trash2,
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock
 } from 'lucide-react';
 
 export default function ItemCard({ 
@@ -11,6 +11,7 @@ export default function ItemCard({
   onViewImage, 
   onToggleFavorite, 
   onTogglePin, 
+  onEditItem,
   onDeleteItem 
 }) {
   const [copied, setCopied] = useState(false);
@@ -265,6 +266,13 @@ export default function ItemCard({
           </p>
         )}
 
+        {item.expiresAt && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: new Date(item.expiresAt) < new Date() ? '#f87171' : '#fbbf24', fontSize: '12px' }}>
+            <CalendarClock size={14} />
+            {new Date(item.expiresAt) < new Date() ? 'Expired' : 'Expires'} {new Date(item.expiresAt).toLocaleDateString()} · alert {item.reminderDays ?? 30} days before
+          </div>
+        )}
+
         {/* Tags */}
         {item.tags && item.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: 'auto' }}>
@@ -334,6 +342,22 @@ export default function ItemCard({
                 <ExternalLink size={14} />
               </a>
             )}
+
+            <button
+              onClick={() => onEditItem(item)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Edit item"
+            >
+              <Pencil size={14} />
+            </button>
 
             <button 
               onClick={() => onDeleteItem(item._id)}

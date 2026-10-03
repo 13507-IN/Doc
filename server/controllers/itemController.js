@@ -1,5 +1,6 @@
 const Item = require('../models/Item');
 const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
+const { createWorker } = require('tesseract.js');
 
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
@@ -163,12 +164,21 @@ exports.updateItem = async (req, res) => {
     if (updateData.folderId === '' || updateData.folderId === 'null') {
       updateData.folderId = null;
     }
+    updateData.updatedAt = new Date();
 
+    const existingItem = await Item.findOne({ _id: id, userId }).select('metadata');
+    if (!existingItem) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
     const item = await Item.findOneAndUpdate({ _id: id, userId }, updateData, { new: true, runValidators: true })
       .populate('folderId', 'name icon color');
 
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Item not found' });
+    const oldPublicId = existingItem.metadata?.cloudinaryPublicId;
+    const newPublicId = item.metadata?.cloudinaryPublicId;
+    if (oldPublicId && oldPublicId !== newPublicId && cloudinaryConfigured) {
+      cloudinary.uploader.destroy(oldPublicId).catch((error) => {
+        console.warn(`Unable to remove replaced Cloudinary asset ${oldPublicId}:`, error.message);
+      });
     }
 
     res.json({ success: true, item });
@@ -259,12 +269,23 @@ exports.uploadImage = async (req, res) => {
       );
       stream.end(req.file.buffer);
     });
+    let ocrText = '';
+    if (req.query.ocr === 'true') {
+      const worker = await createWorker('eng');
+      try {
+        const { data } = await worker.recognize(req.file.buffer);
+        ocrText = data.text.trim();
+      } finally {
+        await worker.terminate();
+      }
+    }
 
     res.json({
       success: true,
       imageUrl: result.secure_url,
       filename: req.file.originalname,
-      cloudinaryPublicId: result.public_id
+      cloudinaryPublicId: result.public_id,
+      ocrText
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -10,6 +10,7 @@ import AIAssistantDrawer from '../components/AIAssistantDrawer';
 import AuthModal from '../components/AuthModal';
 import YouTubeModal from '../components/YouTubeModal';
 import ImageModal from '../components/ImageModal';
+import CommandPalette from '../components/CommandPalette';
 import { Plus, SearchX } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -32,8 +33,10 @@ export default function Home() {
   const [hasMore, setHasMore] = useState(false);
 
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const [activeYouTubeItem, setActiveYouTubeItem] = useState(null);
   const [activeImageItem, setActiveImageItem] = useState(null);
@@ -150,6 +153,17 @@ export default function Home() {
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
+    const listener = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
+
+  useEffect(() => {
     if (!token) return;
     const timer = window.setTimeout(() => { void fetchFolders(); }, 0);
     return () => window.clearTimeout(timer);
@@ -204,6 +218,11 @@ export default function Home() {
     } catch (err) {
       console.error('Error deleting item:', err);
     }
+  };
+
+  const handleEditItem = (item) => {
+    setEditingItem(item);
+    setIsAddItemOpen(true);
   };
 
   const activeFolderObj = folders.find(f => f._id === activeFolder);
@@ -366,6 +385,7 @@ export default function Home() {
                     onViewImage={(item) => setActiveImageItem(item)}
                     onToggleFavorite={handleToggleFavorite}
                     onTogglePin={handleTogglePin}
+                    onEditItem={handleEditItem}
                     onDeleteItem={handleDeleteItem}
                   />
                 ))}
@@ -396,10 +416,18 @@ export default function Home() {
       {/* Modals & Slide-over Assistant Drawer */}
       <AddItemModal 
         isOpen={isAddItemOpen}
-        onClose={() => setIsAddItemOpen(false)}
+        onClose={() => {
+          setIsAddItemOpen(false);
+          setEditingItem(null);
+        }}
         folders={folders}
         defaultFolderId={activeFolder}
-        onItemAdded={() => { fetchItems(); fetchFolders(); }}
+        editingItem={editingItem}
+        onItemAdded={() => {
+          fetchItems();
+          fetchFolders();
+          setEditingItem(null);
+        }}
         token={token}
       />
 
@@ -425,6 +453,16 @@ export default function Home() {
       <ImageModal 
         item={activeImageItem}
         onClose={() => setActiveImageItem(null)}
+      />
+
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        token={token}
+        onEditItem={(item) => {
+          setIsCommandPaletteOpen(false);
+          handleEditItem(item);
+        }}
       />
     </div>
   );

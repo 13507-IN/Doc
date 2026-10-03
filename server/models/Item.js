@@ -29,6 +29,10 @@ const itemSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  ocrText: {
+    type: String,
+    default: ''
+  },
   previewUrl: {
     type: String,
     default: ''
@@ -53,6 +57,16 @@ const itemSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  expiresAt: {
+    type: Date,
+    default: null
+  },
+  reminderDays: {
+    type: Number,
+    default: 30,
+    min: 0,
+    max: 365
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -68,10 +82,11 @@ itemSchema.pre('save', function(next) {
   next();
 });
 
-itemSchema.index({ userId: 1, title: 'text', content: 'text', tags: 'text', url: 'text' });
+itemSchema.index({ userId: 1, title: 'text', content: 'text', ocrText: 'text', tags: 'text', url: 'text' });
 itemSchema.index({ userId: 1, pinned: -1, createdAt: -1, _id: -1 });
 itemSchema.index({ userId: 1, folderId: 1, pinned: -1, createdAt: -1, _id: -1 });
 itemSchema.index({ userId: 1, type: 1, pinned: -1, createdAt: -1, _id: -1 });
 itemSchema.index({ userId: 1, isFavorite: 1, pinned: -1, createdAt: -1, _id: -1 });
+itemSchema.index({ userId: 1, expiresAt: 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
