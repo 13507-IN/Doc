@@ -13,6 +13,7 @@ Store, categorize, search, and converse with all your important information—in
 - 📁 **Multi-Folder Collections**: Organize items into custom folders (e.g. 💼 *Brand Assets*, 🔒 *Private Vault*, 🎥 *YouTube Tutorials*, 🌐 *Bookmarks*) with emoji icons, color badges, and description notes.
 - 🎥 **YouTube Auto Metadata & Lightbox Player**: Paste any YouTube link to automatically extract channel metadata, title, and high-res thumbnails, with responsive video playback inside the app.
 - 🖼️ **Image Vault & Uploads**: Upload local images or paste image URLs, complete with lightboxes.
+- 📄 **PDF Document Vault & Viewer**: Upload PDF documents or paste direct PDF links, with inline interactive PDF reader modal, download options, and attached summary notes.
 - 🌐 **Web Bookmarks**: Scrapes OpenGraph site info, page titles, and meta descriptions.
 - 📝 **Code Snippets & Notes**: Monospace formatted text/code blocks with 1-click clipboard copy.
 - 🤖 **AI Personal Assistant**: Slide-over AI chat drawer allowing natural language query lookup across your folders and items (e.g. *"What is inside my Brand Assets folder?"*, *"Show private notes"*).

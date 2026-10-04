@@ -72,7 +72,7 @@ export default function Navbar({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search YouTube videos, links, notes, images, tags..."
+          placeholder="Search YouTube videos, PDFs, images, links, notes, tags..."
           className="glass-input"
           style={{
             width: '100%',

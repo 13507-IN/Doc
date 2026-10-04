@@ -179,6 +179,7 @@ export default function Sidebar({
           <TypeFilterBtn active={activeType === 'all'} onClick={() => onSelectType('all')} label="All" />
           <TypeFilterBtn active={activeType === 'youtube'} onClick={() => onSelectType('youtube')} icon={<Tv size={13} color="#dc2626" />} label="YouTube" />
           <TypeFilterBtn active={activeType === 'image'} onClick={() => onSelectType('image')} icon={<ImageIcon size={13} color="#059669" />} label="Images" />
+          <TypeFilterBtn active={activeType === 'pdf'} onClick={() => onSelectType('pdf')} icon={<FileText size={13} color="#f43f5e" />} label="PDFs" />
           <TypeFilterBtn active={activeType === 'link'} onClick={() => onSelectType('link')} icon={<LinkIcon size={13} color="#2563eb" />} label="Links" />
           <TypeFilterBtn active={activeType === 'note'} onClick={() => onSelectType('note')} icon={<FileText size={13} color="#d97706" />} label="Notes" />
         </div>

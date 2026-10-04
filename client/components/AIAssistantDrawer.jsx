@@ -113,6 +113,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         {/* Suggested Prompts */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto', background: 'var(--bg-primary)' }}>
           <PromptChip onClick={() => handleSend('Get all my YouTube links')} label="🎥 YouTube Links" />
+          <PromptChip onClick={() => handleSend('Show my PDF documents')} label="📄 PDF Documents" />
           <PromptChip onClick={() => handleSend('Show Brand Assets folder')} label="💼 Brand Assets" />
           <PromptChip onClick={() => handleSend('Find private & important notes')} label="🔒 Private Notes" />
         </div>
@@ -212,7 +213,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask assistant to find videos, links, notes..."
+              placeholder="Ask assistant to find videos, PDFs, links, notes..."
               className="glass-input"
               style={{ flex: 1, fontSize: '13px' }}
             />

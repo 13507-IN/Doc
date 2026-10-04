@@ -96,6 +96,25 @@ exports.extractMetadata = async (req, res) => {
     const cached = getCachedMetadata(parsedUrl.href);
     if (cached) return res.json(cached);
 
+    // Check if URL directly points to a PDF document
+    if (parsedUrl.pathname.toLowerCase().endsWith('.pdf')) {
+      const rawName = decodeURIComponent(parsedUrl.pathname.split('/').pop() || 'document.pdf');
+      const cleanTitle = rawName.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() || 'PDF Document';
+      const responsePayload = {
+        success: true,
+        type: 'pdf',
+        title: cleanTitle,
+        previewUrl: '',
+        metadata: {
+          filename: rawName,
+          mimeType: 'application/pdf',
+          sourceUrl: parsedUrl.href
+        }
+      };
+      cacheMetadata(parsedUrl.href, responsePayload);
+      return res.json(responsePayload);
+    }
+
     const youtubeId = extractYouTubeId(parsedUrl.href);
 
     if (youtubeId) {

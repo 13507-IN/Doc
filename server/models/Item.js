@@ -13,7 +13,7 @@ const itemSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['youtube', 'image', 'link', 'note', 'document'],
+    enum: ['youtube', 'image', 'link', 'note', 'document', 'pdf'],
     required: true
   },
   folderId: {

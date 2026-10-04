@@ -148,5 +148,6 @@ select option {
 
 .type-youtube { background: rgba(220, 38, 38, 0.15); color: #fca5a5; border: 1px solid rgba(220, 38, 38, 0.3); }
 .type-image { background: rgba(5, 150, 105, 0.15); color: #6ee7b7; border: 1px solid rgba(5, 150, 105, 0.3); }
+.type-pdf { background: rgba(225, 29, 72, 0.15); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.3); }
 .type-link { background: rgba(37, 99, 235, 0.15); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.3); }
 .type-note { background: rgba(217, 119, 6, 0.15); color: #fde047; border: 1px solid rgba(217, 119, 6, 0.3); }

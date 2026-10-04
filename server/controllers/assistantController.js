@@ -29,6 +29,8 @@ exports.queryAssistant = async (req, res) => {
       categoryDetected = 'link';
     } else if (cleanQuery.includes('note') || cleanQuery.includes('code') || cleanQuery.includes('text')) {
       categoryDetected = 'note';
+    } else if (cleanQuery.includes('pdf') || cleanQuery.includes('pdfs') || cleanQuery.includes('document') || cleanQuery.includes('documents') || cleanQuery.includes('paper')) {
+      categoryDetected = 'pdf';
     }
 
     const itemQuery = { userId };
@@ -39,7 +41,7 @@ exports.queryAssistant = async (req, res) => {
       'find', 'get', 'show', 'my', 'me', 'all', 'important', 'everything',
       'anything', 'folder', 'folders', 'item', 'items', 'youtube', 'video',
       'videos', 'image', 'images', 'photo', 'picture', 'link', 'links',
-      'website', 'url', 'note', 'notes', 'code', 'text',
+      'website', 'url', 'note', 'notes', 'code', 'text', 'pdf', 'pdfs', 'document', 'documents', 'paper',
       ...(targetFolder ? targetFolder.name.toLowerCase().split(/\W+/) : [])
     ]);
     const keywords = cleanQuery

@@ -300,7 +300,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const url = urlInput.value;
     const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-    const type = isYouTube ? 'youtube' : 'link';
+    const isPdf = url.toLowerCase().endsWith('.pdf') || url.toLowerCase().includes('.pdf?') || url.toLowerCase().includes('/pdf/');
+    let type = isYouTube ? 'youtube' : (isPdf ? 'pdf' : 'link');
 
     chrome.storage.local.get(['holder_token'], async (result) => {
       const token = result.holder_token;
@@ -323,6 +324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (metaData.success) {
             previewUrl = metaData.previewUrl || '';
             metadata = metaData.metadata || {};
+            if (metaData.type) type = metaData.type;
           }
         } catch (err) {}
 

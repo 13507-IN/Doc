@@ -10,6 +10,7 @@ import AIAssistantDrawer from '../components/AIAssistantDrawer';
 import AuthModal from '../components/AuthModal';
 import YouTubeModal from '../components/YouTubeModal';
 import ImageModal from '../components/ImageModal';
+import PdfModal from '../components/PdfModal';
 import CommandPalette from '../components/CommandPalette';
 import { Plus, SearchX } from 'lucide-react';
 
@@ -40,6 +41,7 @@ export default function Home() {
 
   const [activeYouTubeItem, setActiveYouTubeItem] = useState(null);
   const [activeImageItem, setActiveImageItem] = useState(null);
+  const [activePdfItem, setActivePdfItem] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const requestControllerRef = useRef(null);
@@ -347,7 +349,7 @@ export default function Home() {
                 No Items Found
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                {searchQuery ? `No results matching "${searchQuery}".` : 'Your vault is ready! Click below to save your first YouTube video, image, or link.'}
+                {searchQuery ? `No results matching "${searchQuery}".` : 'Your vault is ready! Click below to save your first YouTube video, PDF, image, or link.'}
               </p>
               <button 
                 onClick={() => setIsAddItemOpen(true)}
@@ -383,6 +385,7 @@ export default function Home() {
                     item={item}
                     onPlayYouTube={(item) => setActiveYouTubeItem(item)}
                     onViewImage={(item) => setActiveImageItem(item)}
+                    onViewPdf={(item) => setActivePdfItem(item)}
                     onToggleFavorite={handleToggleFavorite}
                     onTogglePin={handleTogglePin}
                     onEditItem={handleEditItem}
@@ -453,6 +456,11 @@ export default function Home() {
       <ImageModal 
         item={activeImageItem}
         onClose={() => setActiveImageItem(null)}
+      />
+
+      <PdfModal 
+        item={activePdfItem}
+        onClose={() => setActivePdfItem(null)}
       />
 
       <CommandPalette

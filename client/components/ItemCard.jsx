@@ -9,6 +9,7 @@ export default function ItemCard({
   item, 
   onPlayYouTube, 
   onViewImage, 
+  onViewPdf,
   onToggleFavorite, 
   onTogglePin, 
   onEditItem,
@@ -27,6 +28,7 @@ export default function ItemCard({
     switch (type) {
       case 'youtube': return 'type-youtube';
       case 'image': return 'type-image';
+      case 'pdf': return 'type-pdf';
       case 'link': return 'type-link';
       case 'note': return 'type-note';
       default: return 'type-link';
@@ -37,6 +39,7 @@ export default function ItemCard({
     switch (type) {
       case 'youtube': return <Tv size={12} />;
       case 'image': return <ImageIcon size={12} />;
+      case 'pdf': return <FileText size={12} />;
       case 'link': return <LinkIcon size={12} />;
       case 'note': return <FileText size={12} />;
       default: return <LinkIcon size={12} />;
@@ -137,6 +140,71 @@ export default function ItemCard({
             inset: 0,
             background: 'linear-gradient(to top, rgba(11, 15, 25, 0.7) 0%, transparent 60%)'
           }} />
+        </div>
+      )}
+
+      {item.type === 'pdf' && (
+        <div 
+          className="card-media-wrapper"
+          onClick={() => onViewPdf && onViewPdf(item)}
+          style={{
+            height: '150px',
+            width: '100%',
+            backgroundColor: '#0c0e18',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+            borderBottom: '1px solid var(--border-color)',
+            background: 'linear-gradient(135deg, rgba(225, 29, 72, 0.12) 0%, rgba(15, 18, 32, 0.95) 100%)'
+          }}
+        >
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '12px',
+            background: 'rgba(225, 29, 72, 0.18)',
+            border: '1px solid rgba(225, 29, 72, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fda4af',
+            marginBottom: '6px',
+            boxShadow: '0 4px 15px rgba(225, 29, 72, 0.25)'
+          }}>
+            <FileText size={24} />
+          </div>
+
+          <span style={{
+            fontSize: '11px',
+            color: '#fda4af',
+            fontWeight: 700,
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase'
+          }}>
+            PDF Document
+          </span>
+
+          {item.metadata?.size && (
+            <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>
+              {item.metadata.size > 1024 * 1024
+                ? (item.metadata.size / (1024 * 1024)).toFixed(1) + ' MB'
+                : Math.round(item.metadata.size / 1024) + ' KB'}
+            </span>
+          )}
+
+          <div style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '10px',
+            fontSize: '10px',
+            color: 'var(--text-muted)'
+          }}>
+            Click to read
+          </div>
         </div>
       )}
 
@@ -245,6 +313,22 @@ export default function ItemCard({
             color: 'var(--text-muted)',
             fontFamily: 'monospace',
             maxHeight: '90px',
+            overflowY: 'auto',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {item.content}
+          </div>
+        )}
+
+        {item.type === 'pdf' && item.content && (
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+            maxHeight: '80px',
             overflowY: 'auto',
             whiteSpace: 'pre-wrap'
           }}>

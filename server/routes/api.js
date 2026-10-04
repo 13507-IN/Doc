@@ -11,6 +11,20 @@ const assistantController = require('../controllers/assistantController');
 const profileController = require('../controllers/profileController');
 const authMiddleware = require('../middleware/auth');
 
+// Multer Storage Configuration for PDF Uploads
+const uploadPdf = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const isPdfMime = file.mimetype === 'application/pdf';
+    const isPdfExt = file.originalname && file.originalname.toLowerCase().endsWith('.pdf');
+    if (!isPdfMime && !isPdfExt) {
+      return cb(new Error('Only PDF documents (.pdf) are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
 // Multer Storage Configuration for Image Uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -62,6 +76,7 @@ router.delete('/items/:id', authMiddleware, itemController.deleteItem);
 router.patch('/items/:id/favorite', authMiddleware, itemController.toggleFavorite);
 router.patch('/items/:id/pin', authMiddleware, itemController.togglePin);
 router.post('/items/upload-image', authMiddleware, upload.single('image'), itemController.uploadImage);
+router.post('/items/upload-pdf', authMiddleware, uploadPdf.single('pdf'), itemController.uploadPdf);
 
 // Saved form profiles
 router.get('/profiles', authMiddleware, profileController.getProfiles);
