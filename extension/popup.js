@@ -1,4 +1,18 @@
 let API_BASE = 'http://localhost:5000/api';
+const AUTH_SYNC_DURATION_MS = 48 * 60 * 60 * 1000;
+const AUTH_STORAGE_KEYS = ['holder_token', 'holder_user', 'holder_auth_synced_at', 'holder_auth_expires_at'];
+
+async function readApiResponse(response) {
+  const contentType = response.headers.get('content-type') || '';
+  const body = contentType.includes('application/json')
+    ? await response.json()
+    : null;
+
+  if (!response.ok || !body?.success) {
+    throw new Error(body?.message || `Request failed (${response.status})`);
+  }
+  return body;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   const authSection = document.getElementById('authSection');
@@ -7,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const logoutBtn = document.getElementById('logoutBtn');
   const syncAuthBtn = document.getElementById('syncAuthBtn');
   const authStatus = document.getElementById('authStatus');
+  const authHelp = document.getElementById('authHelp');
   const userBadge = document.getElementById('userBadge');
   const userName = document.getElementById('userName');
 
@@ -72,12 +87,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (tabs && tabs[0]) {
           chrome.tabs.sendMessage(tabs[0].id, { type: 'REQUEST_HOLDER_AUTH_SYNC' }, (response) => {
             if (chrome.runtime.lastError) {
-              authStatus.textContent = 'Open Holder website tab to auto-sync.';
+              showAuthSection('Open the Holder website to sync again.');
               authStatus.className = 'status error';
             } else if (response && response.token) {
-              authStatus.textContent = '✅ Synced from website!';
+              authStatus.textContent = '✅ Synced for the next 48 hours.';
               authStatus.className = 'status success';
               setTimeout(initAuthCheck, 400);
+            } else {
+              showAuthSection('Open the Holder website to sync again.');
             }
           });
         }
@@ -85,26 +102,60 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Check saved token from chrome.storage.local (synced from web app or manual login)
+  function setAuthExpiry(token) {
+    let expiresAt = Date.now() + AUTH_SYNC_DURATION_MS;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (Number.isFinite(payload.exp)) expiresAt = Math.min(expiresAt, payload.exp * 1000);
+    } catch {}
+    return { holder_auth_synced_at: Date.now(), holder_auth_expires_at: expiresAt };
+  }
+
+  function clearExpiredAuth() {
+    return chrome.storage.local.remove(AUTH_STORAGE_KEYS);
+  }
+
+  // Check saved auth. A successful sync stays usable for 48 hours, even when
+  // the Holder website is not open. We only invalidate it early for a confirmed
+  // server-side authentication failure, never for a temporary network error.
   function initAuthCheck() {
-    chrome.storage.local.get(['holder_token', 'holder_user'], async (result) => {
+    chrome.storage.local.get(AUTH_STORAGE_KEYS, async (result) => {
       const token = result.holder_token;
       const user = result.holder_user;
 
       if (token) {
+        // Upgrade existing installations without abruptly logging users out.
+        if (!result.holder_auth_expires_at) {
+          const expiry = setAuthExpiry(token);
+          chrome.storage.local.set(expiry);
+          showSaverForm(token, user);
+          return;
+        }
+
+        if (Date.now() >= result.holder_auth_expires_at) {
+          await clearExpiredAuth();
+          showAuthSection('Your 48-hour sync expired. Open the Holder website to sync again.');
+          return;
+        }
+
+        // Render immediately from the local sync. Verification continues in the
+        // background so opening the popup never feels like a re-authentication.
+        showSaverForm(token, user);
         try {
           const meRes = await fetch(`${API_BASE}/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
+          if (meRes.status === 401 || meRes.status === 403) {
+            await clearExpiredAuth();
+            showAuthSection('Your Holder sync is no longer valid. Open the Holder website to sync again.');
+            return;
+          }
           const meData = await meRes.json();
           if (meData.success) {
-            showSaverForm(token, meData.user || user);
-          } else {
-            showAuthSection();
+            if (meData.user) chrome.storage.local.set({ holder_user: meData.user });
           }
         } catch (err) {
-          // If offline or server pending, trust stored local token
-          showSaverForm(token, user);
+          // Offline/server errors do not break an otherwise valid 48-hour sync.
         }
       } else {
         showAuthSection();
@@ -112,11 +163,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  function showAuthSection() {
+  function showAuthSection(message = '') {
     authSection.classList.remove('hidden');
     saveForm.classList.add('hidden');
     logoutBtn.classList.add('hidden');
     userBadge.classList.add('hidden');
+    if (message) {
+      authHelp.textContent = message;
+      authStatus.textContent = '';
+    } else {
+      authHelp.textContent = 'Sign in here, or sign in on the Holder website for automatic sync.';
+    }
   }
 
   function showSaverForm(token, user) {
@@ -226,9 +283,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (data.success && data.token) {
         chrome.storage.local.set({ 
           holder_token: data.token,
-          holder_user: data.user
+          holder_user: data.user,
+          ...setAuthExpiry(data.token)
         });
-        authStatus.textContent = '✅ Logged in!';
+        authStatus.textContent = '✅ Logged in for the next 48 hours!';
         authStatus.className = 'status success';
         setTimeout(() => showSaverForm(data.token, data.user), 500);
       } else {
@@ -242,7 +300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Handle Logout
   logoutBtn.addEventListener('click', () => {
-    chrome.storage.local.remove(['holder_token', 'holder_user']);
+    chrome.storage.local.remove(AUTH_STORAGE_KEYS);
     showAuthSection();
   });
 
@@ -371,8 +429,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id || tab.windowId === undefined) {
+        throw new Error('Could not access the active tab. Select a normal web page and try again.');
+      }
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
       const imageBlob = await (await fetch(dataUrl)).blob();
+      if (!imageBlob.size) throw new Error('Chrome returned an empty screenshot. Try again on a normal web page.');
       const fileName = `screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
       const formData = new FormData();
       formData.append('image', imageBlob, fileName);
@@ -385,10 +447,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      const uploadData = await uploadResponse.json();
-      if (!uploadResponse.ok || !uploadData.success) {
-        throw new Error(uploadData.message || 'Screenshot upload failed');
-      }
+      const uploadData = await readApiResponse(uploadResponse);
 
       const itemResponse = await fetch(`${API_BASE}/items`, {
         method: 'POST',
@@ -410,10 +469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           ])]
         })
       });
-      const itemData = await itemResponse.json();
-      if (!itemResponse.ok || !itemData.success) {
-        throw new Error(itemData.message || 'Could not save the screenshot');
-      }
+      await readApiResponse(itemResponse);
 
       statusDiv.textContent = '✅ Screenshot saved to your vault!';
       statusDiv.className = 'status success';

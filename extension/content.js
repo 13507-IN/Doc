@@ -1,6 +1,18 @@
 // Content script running on the Holder Web App page to sync authentication token with Chrome Extension
 
+function isHolderWebsite() {
+  return (
+    (location.hostname === 'localhost' && location.port === '3000') ||
+    location.hostname.endsWith('.vercel.app')
+  );
+}
+
 function syncTokenToExtension() {
+  // This script also powers clipping on ordinary websites. Only the Holder web
+  // app is allowed to alter extension authentication; otherwise navigating to
+  // any page without Holder localStorage would silently clear a valid sync.
+  if (!isHolderWebsite()) return false;
+
   try {
     const token = localStorage.getItem('holder_token');
     const userStr = localStorage.getItem('holder_user');
@@ -28,18 +40,19 @@ function syncTokenToExtension() {
   } catch (err) {
     console.error('Holder Extension Sync Error:', err);
   }
+  return true;
 }
 
 // Initial sync on page load
-if (document.readyState === 'loading') {
+if (isHolderWebsite() && document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', syncTokenToExtension);
-} else {
+} else if (isHolderWebsite()) {
   syncTokenToExtension();
 }
 
 // Listen for window postMessage from Web App (login/logout/Google OAuth)
 window.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'HOLDER_AUTH_TOKEN') {
+  if (isHolderWebsite() && event.data && event.data.type === 'HOLDER_AUTH_TOKEN') {
     if (event.data.token) {
       chrome.runtime.sendMessage({
         type: 'SYNC_HOLDER_AUTH',
@@ -56,7 +69,7 @@ window.addEventListener('message', (event) => {
 
 // Listen for cross-tab localStorage changes
 window.addEventListener('storage', (event) => {
-  if (event.key === 'holder_token' || event.key === 'holder_user') {
+  if (isHolderWebsite() && (event.key === 'holder_token' || event.key === 'holder_user')) {
     syncTokenToExtension();
   }
 });
@@ -64,8 +77,11 @@ window.addEventListener('storage', (event) => {
 // Respond to direct requests from popup script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'REQUEST_HOLDER_AUTH_SYNC') {
-    syncTokenToExtension();
-    sendResponse({ success: true, token: localStorage.getItem('holder_token') });
+    const synced = syncTokenToExtension();
+    sendResponse({
+      success: synced,
+      token: synced ? localStorage.getItem('holder_token') : null
+    });
   }
 
   if (request.type === 'GET_SMART_CLIP') {

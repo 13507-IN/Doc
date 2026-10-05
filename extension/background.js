@@ -1,4 +1,23 @@
 // Background service worker: auth sync plus quick-save context-menu actions.
+// A website sync is deliberately trusted for a bounded period so the popup can
+// work without repeatedly requiring the Holder tab to be opened.
+const AUTH_SYNC_DURATION_MS = 48 * 60 * 60 * 1000;
+const AUTH_STORAGE_KEYS = ['holder_token', 'holder_user', 'holder_auth_synced_at', 'holder_auth_expires_at'];
+
+function getAuthExpiry(token) {
+  const syncedAt = Date.now();
+  let expiresAt = syncedAt + AUTH_SYNC_DURATION_MS;
+
+  // Never keep a JWT beyond its own expiry when it contains one.
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (Number.isFinite(payload.exp)) expiresAt = Math.min(expiresAt, payload.exp * 1000);
+  } catch {
+    // Tokens do not have to be JWTs; the 48-hour sync window still applies.
+  }
+
+  return { syncedAt, expiresAt };
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -14,8 +33,22 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function getSession() {
-  const data = await chrome.storage.local.get(['holder_token', 'holder_server_url']);
+  const data = await chrome.storage.local.get(['holder_token', 'holder_server_url', 'holder_auth_expires_at']);
   if (!data.holder_token) throw new Error('Sign in to Holder first');
+  if (!data.holder_auth_expires_at) {
+    // Migration for existing users: start their bounded 48-hour window the
+    // first time this upgraded extension uses their already-saved token.
+    const { syncedAt, expiresAt } = getAuthExpiry(data.holder_token);
+    await chrome.storage.local.set({
+      holder_auth_synced_at: syncedAt,
+      holder_auth_expires_at: expiresAt
+    });
+    data.holder_auth_expires_at = expiresAt;
+  }
+  if (Date.now() >= data.holder_auth_expires_at) {
+    await chrome.storage.local.remove(AUTH_STORAGE_KEYS);
+    throw new Error('Your Holder sync expired. Open the Holder website to sync again.');
+  }
   return {
     token: data.holder_token,
     apiBase: (data.holder_server_url || 'http://localhost:5000/api').replace(/\/$/, '')
@@ -106,18 +139,21 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SYNC_HOLDER_AUTH') {
-    chrome.storage.local.set({ 
+    const { syncedAt, expiresAt } = getAuthExpiry(message.token);
+    chrome.storage.local.set({
       holder_token: message.token,
-      holder_user: message.user
+      holder_user: message.user,
+      holder_auth_synced_at: syncedAt,
+      holder_auth_expires_at: expiresAt
     }, () => {
-      console.log('✅ Holder Extension synced token from web app');
-      sendResponse({ success: true });
+      console.log('✅ Holder Extension synced auth from web app for up to 48 hours');
+      sendResponse({ success: true, expiresAt });
     });
     return true;
   }
 
   if (message.type === 'CLEAR_HOLDER_AUTH') {
-    chrome.storage.local.remove(['holder_token', 'holder_user'], () => {
+    chrome.storage.local.remove(AUTH_STORAGE_KEYS, () => {
       console.log('🔒 Holder Extension cleared token');
       sendResponse({ success: true });
     });

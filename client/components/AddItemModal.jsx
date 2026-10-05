@@ -29,6 +29,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const isEditing = Boolean(editingItem);
 
@@ -80,6 +81,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       setOcrText('');
       setPdfFileName('');
       setPdfFileSize('');
+      setSaveError('');
     }, 0);
     return () => window.clearTimeout(timer);
   }, [defaultFolderId, editingItem, isOpen]);
@@ -212,6 +214,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     }
 
     try {
+      setSaveError('');
       setSubmitting(true);
 
       const payload = {
@@ -245,6 +248,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
     } catch (err) {
       console.error('Error creating item:', err);
+      setSaveError(err.response?.data?.message || 'Could not save this item. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -613,6 +617,11 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
 
           {/* Submit */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+            {saveError && (
+              <p role="alert" style={{ flex: 1, alignSelf: 'center', color: '#fda4af', fontSize: '12px', lineHeight: 1.4 }}>
+                {saveError}
+              </p>
+            )}
             <button 
               type="button"
               onClick={onClose}

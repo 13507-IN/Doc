@@ -28,7 +28,8 @@ const uploadPdf = multer({
 // Multer Storage Configuration for Image Uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  // High-DPI browser screenshots routinely exceed 10 MB as PNGs.
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) {
       return cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
@@ -77,6 +78,21 @@ router.patch('/items/:id/favorite', authMiddleware, itemController.toggleFavorit
 router.patch('/items/:id/pin', authMiddleware, itemController.togglePin);
 router.post('/items/upload-image', authMiddleware, upload.single('image'), itemController.uploadImage);
 router.post('/items/upload-pdf', authMiddleware, uploadPdf.single('pdf'), itemController.uploadPdf);
+
+// Multer otherwise falls through to Express's HTML error page. API clients
+// need a JSON response they can show to the user.
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    const message = error.code === 'LIMIT_FILE_SIZE'
+      ? 'The file is too large. The maximum upload size is 25 MB.'
+      : error.message;
+    return res.status(400).json({ success: false, message });
+  }
+  if (error) {
+    return res.status(400).json({ success: false, message: error.message || 'Upload failed' });
+  }
+  next();
+});
 
 // Saved form profiles
 router.get('/profiles', authMiddleware, profileController.getProfiles);

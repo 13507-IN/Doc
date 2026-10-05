@@ -124,7 +124,10 @@ exports.getItemById = async (req, res) => {
 exports.createItem = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { title, type, folderId, url, content, previewUrl, tags, metadata, isFavorite, isPrivate, pinned } = req.body;
+    const {
+      title, type, folderId, url, content, previewUrl, ocrText, tags, metadata,
+      isFavorite, isPrivate, pinned, expiresAt, reminderDays
+    } = req.body;
 
     if (!title || !type) {
       return res.status(400).json({ success: false, message: 'Title and type are required' });
@@ -141,12 +144,15 @@ exports.createItem = async (req, res) => {
       folderId: folderId || null,
       url: url || '',
       content: content || '',
+      ocrText: ocrText || '',
       previewUrl: previewUrl || '',
       tags: processedTags,
       metadata: metadata || {},
       isFavorite: Boolean(isFavorite),
       isPrivate: Boolean(isPrivate),
-      pinned: Boolean(pinned)
+      pinned: Boolean(pinned),
+      expiresAt: expiresAt || null,
+      reminderDays: Number.isFinite(Number(reminderDays)) ? Number(reminderDays) : 30
     });
 
     await item.save();
