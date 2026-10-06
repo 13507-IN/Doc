@@ -16,6 +16,7 @@ exports.queryAssistant = async (req, res) => {
     let matchedItems = [];
     let assistantMessage = '';
     let categoryDetected = null;
+    const screenshotIntent = /\b(screenshot|screenshots|screen\s*shot|screen\s*shots)\b/i.test(cleanQuery);
 
     // Detect target folder intent
     const targetFolder = allFolders.find(f => cleanQuery.includes(f.name.toLowerCase()));
@@ -23,7 +24,7 @@ exports.queryAssistant = async (req, res) => {
     // Detect target item type intent
     if (cleanQuery.includes('youtube') || cleanQuery.includes('video') || cleanQuery.includes('videos')) {
       categoryDetected = 'youtube';
-    } else if (cleanQuery.includes('image') || cleanQuery.includes('photo') || cleanQuery.includes('picture')) {
+    } else if (screenshotIntent || cleanQuery.includes('image') || cleanQuery.includes('photo') || cleanQuery.includes('picture')) {
       categoryDetected = 'image';
     } else if (cleanQuery.includes('link') || cleanQuery.includes('website') || cleanQuery.includes('url')) {
       categoryDetected = 'link';
@@ -40,7 +41,7 @@ exports.queryAssistant = async (req, res) => {
     const ignoredTerms = new Set([
       'find', 'get', 'show', 'my', 'me', 'all', 'important', 'everything',
       'anything', 'folder', 'folders', 'item', 'items', 'youtube', 'video',
-      'videos', 'image', 'images', 'photo', 'picture', 'link', 'links',
+      'videos', 'image', 'images', 'photo', 'picture', 'screenshot', 'screenshots', 'screen', 'shot', 'shots', 'link', 'links',
       'website', 'url', 'note', 'notes', 'code', 'text', 'pdf', 'pdfs', 'document', 'documents', 'paper',
       ...(targetFolder ? targetFolder.name.toLowerCase().split(/\W+/) : [])
     ]);
@@ -49,6 +50,16 @@ exports.queryAssistant = async (req, res) => {
       .filter((term) => term.length > 2 && !ignoredTerms.has(term))
       .join(' ');
     if (keywords.length > 2) itemQuery.$text = { $search: keywords };
+
+    // Screenshot captures are image items tagged by the extension. Prefer that
+    // signal for an explicit screenshot request without excluding older captures
+    // that predate the tag and are identifiable by their title.
+    if (screenshotIntent) {
+      itemQuery.$or = [
+        { tags: 'screenshot' },
+        { title: { $regex: 'screenshot', $options: 'i' } }
+      ];
+    }
 
     matchedItems = await Item.find(itemQuery)
       .populate('folderId', 'name icon color')
@@ -62,7 +73,9 @@ exports.queryAssistant = async (req, res) => {
       assistantMessage = `I searched your personal vault for "${query}", but couldn't find any matching items.`;
     } else {
       let folderContext = targetFolder ? ` inside your "${targetFolder.name}" folder` : '';
-      let typeContext = categoryDetected ? ` ${categoryDetected} items` : ' items';
+      let typeContext = screenshotIntent
+        ? ' matching screenshots'
+        : (categoryDetected ? ` ${categoryDetected} items` : ' items');
       
       assistantMessage = `I retrieved ${totalCount}${typeContext}${folderContext} for you!`;
     }

@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { X, Sparkles, Send, ArrowRight, ExternalLink } from 'lucide-react';
+import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -10,7 +10,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Hello! I am your Personal Vault Assistant. Ask me anything like: "Get all my YouTube links", "What is inside my Brand Assets folder?", or "Find private notes"!'
+      text: 'Hello! I am your Personal Vault Assistant. Ask me anything like: "Get all my YouTube links", "Find the screenshot with my Wi-Fi password", or "What is inside my Brand Assets folder?"'
     }
   ]);
   const [loading, setLoading] = useState(false);
@@ -115,6 +115,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
           <PromptChip onClick={() => handleSend('Get all my YouTube links')} label="🎥 YouTube Links" />
           <PromptChip onClick={() => handleSend('Show my PDF documents')} label="📄 PDF Documents" />
           <PromptChip onClick={() => handleSend('Show Brand Assets folder')} label="💼 Brand Assets" />
+          <PromptChip onClick={() => handleSend('Find my screenshots')} label="📸 Screenshots" />
           <PromptChip onClick={() => handleSend('Find private & important notes')} label="🔒 Private Notes" />
         </div>
 
@@ -153,13 +154,34 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                       justifyContent: 'space-between',
                       gap: '8px'
                     }}>
-                      <div style={{ overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '9px', overflow: 'hidden', minWidth: 0 }}>
+                        {item.type === 'image' && (item.previewUrl || item.url) ? (
+                          <a
+                            href={item.previewUrl || item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open ${item.title}`}
+                            style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}
+                          >
+                            {/* Search results should make matching screenshots immediately visible. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.previewUrl || item.url}
+                              alt={item.title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          </a>
+                        ) : item.type === 'image' ? (
+                          <ImageIcon size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                        ) : null}
+                        <div style={{ overflow: 'hidden', minWidth: 0 }}>
                         <p style={{ fontSize: '12px', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                           {item.title}
                         </p>
                         <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                           {item.type.toUpperCase()} {item.folderId ? `• ${item.folderId.name}` : ''}
                         </span>
+                        </div>
                       </div>
                       {item.url && (
                         <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', padding: '2px' }}>

@@ -110,7 +110,10 @@ async function saveScreenshot(tab) {
     previewUrl: upload.imageUrl,
     ocrText: upload.ocrText || '',
     tags: ['screenshot', 'quick-clip'],
-    metadata: { cloudinaryPublicId: upload.cloudinaryPublicId }
+    metadata: {
+      cloudinaryPublicId: upload.cloudinaryPublicId,
+      localFilename: upload.localFilename
+    }
   });
   showResult('✓');
 }

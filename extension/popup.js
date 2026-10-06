@@ -442,7 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
       if (!token) throw new Error('Please sign in before saving a screenshot');
 
-      const uploadResponse = await fetch(`${API_BASE}/items/upload-image`, {
+      const uploadResponse = await fetch(`${API_BASE}/items/upload-image?ocr=true`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -462,7 +462,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           content: notesInput.value,
           folderId: folderSelect.value || null,
           previewUrl: uploadData.imageUrl,
-          metadata: { cloudinaryPublicId: uploadData.cloudinaryPublicId },
+          ocrText: uploadData.ocrText || '',
+          metadata: {
+            cloudinaryPublicId: uploadData.cloudinaryPublicId,
+            localFilename: uploadData.localFilename
+          },
           tags: [...new Set([
             'screenshot',
             ...tagsInput.value.split(',').map((tag) => tag.trim()).filter(Boolean)
