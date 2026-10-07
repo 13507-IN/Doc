@@ -10,6 +10,7 @@ const passport = require('passport');
 const session = require('express-session');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const configurePassport = require('./config/passport');
+const { verifyCloudinary } = require('./config/cloudinary');
 
 dotenv.config();
 
@@ -81,6 +82,18 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: 'API route not found' });
+});
+
+app.use((error, req, res, next) => {
+  console.error('[API] Unhandled error:', error.message);
+  res.status(error.status || 500).json({
+    success: false,
+    message: error.status ? error.message : 'Something went wrong. Please try again.'
+  });
+});
+
 // Database Connection
 async function connectDB() {
   const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/holder_db';
@@ -116,6 +129,7 @@ async function connectDB() {
 }
 
 connectDB().then(() => {
+  verifyCloudinary();
   app.listen(PORT, () => {
     console.log(`⚡ Holder Server ready on port http://localhost:${PORT}`);
   });

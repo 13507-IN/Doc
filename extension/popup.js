@@ -38,10 +38,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const notesInput = document.getElementById('notes');
   const statusDiv = document.getElementById('status');
   const saveScreenshotBtn = document.getElementById('saveScreenshotBtn');
+  const screenshotPreview = document.getElementById('screenshotPreview');
   const profileSelect = document.getElementById('profileSelect');
   const previewFillBtn = document.getElementById('previewFillBtn');
   const applyFillBtn = document.getElementById('applyFillBtn');
   const createProfileBtn = document.getElementById('createProfileBtn');
+  const profileEditor = document.getElementById('profileEditor');
+  const profileNameInput = document.getElementById('profileName');
+  const profileCategoryInput = document.getElementById('profileCategory');
+  const profileFieldsInput = document.getElementById('profileFields');
+  const saveProfileBtn = document.getElementById('saveProfileBtn');
   let profileMappings = [];
 
   // Load configured API Server URL from chrome.storage.local
@@ -239,26 +245,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  createProfileBtn.addEventListener('click', async () => {
-    const name = window.prompt('Profile name (for example: Personal Address)');
-    if (!name) return;
-    const fieldsText = window.prompt('Enter fields as JSON, for example: {"first name":"Asha","email":"asha@example.com","city":"Mumbai"}');
-    if (!fieldsText) return;
+  createProfileBtn.addEventListener('click', () => {
+    profileEditor.classList.toggle('hidden');
+    if (!profileEditor.classList.contains('hidden')) profileNameInput.focus();
+  });
+
+  saveProfileBtn.addEventListener('click', async () => {
+    const name = profileNameInput.value.trim();
+    const fields = Object.fromEntries(
+      profileFieldsInput.value
+        .split('\n')
+        .map((line) => line.split(/:(.+)/))
+        .map(([key, value]) => [key?.trim(), value?.trim()])
+        .filter(([key, value]) => key && value)
+    );
+    if (!name || !Object.keys(fields).length) {
+      statusDiv.textContent = '❌ Add a profile name and at least one “Field: value” line.';
+      statusDiv.className = 'status error';
+      return;
+    }
     try {
-      const fields = JSON.parse(fieldsText);
       const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
       const response = await fetch(`${API_BASE}/profiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, category: 'personal', fields })
+        body: JSON.stringify({ name, category: profileCategoryInput.value.trim() || 'personal', fields })
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.message || 'Could not save profile');
       await loadProfiles(token);
+      profileNameInput.value = '';
+      profileFieldsInput.value = '';
+      profileEditor.classList.add('hidden');
       statusDiv.textContent = '✅ Profile saved.';
       statusDiv.className = 'status success';
     } catch (error) {
-      statusDiv.textContent = `❌ ${error.message || 'Use valid JSON for the fields.'}`;
+      statusDiv.textContent = `❌ ${error.message || 'Could not save this profile.'}`;
       statusDiv.className = 'status error';
     }
   });
@@ -433,53 +455,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error('Could not access the active tab. Select a normal web page and try again.');
       }
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+      screenshotPreview.src = dataUrl;
+      screenshotPreview.classList.remove('hidden');
+      statusDiv.textContent = 'Screenshot captured. Saving it now…';
       const imageBlob = await (await fetch(dataUrl)).blob();
       if (!imageBlob.size) throw new Error('Chrome returned an empty screenshot. Try again on a normal web page.');
       const fileName = `screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
       const formData = new FormData();
       formData.append('image', imageBlob, fileName);
+      formData.append('title', `Screenshot — ${tab.title || new Date().toLocaleString()}`);
+      formData.append('url', tab.url || '');
+      formData.append('folderId', folderSelect.value || '');
+      formData.append('content', notesInput.value);
+      formData.append('tags', tagsInput.value);
 
       const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
       if (!token) throw new Error('Please sign in before saving a screenshot');
 
-      const uploadResponse = await fetch(`${API_BASE}/items/upload-image?ocr=true`, {
+      const uploadResponse = await fetch(`${API_BASE}/items/screenshot`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      const uploadData = await readApiResponse(uploadResponse);
+      const screenshotData = await readApiResponse(uploadResponse);
+      if (screenshotData.storage === 'local') {
+        console.error('[Holder] Cloudinary is unavailable; screenshot was saved to server-local storage.', screenshotData.storageWarning);
+      }
 
-      const itemResponse = await fetch(`${API_BASE}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: `Screenshot — ${tab.title || new Date().toLocaleString()}`,
-          type: 'image',
-          url: tab.url || '',
-          content: notesInput.value,
-          folderId: folderSelect.value || null,
-          previewUrl: uploadData.imageUrl,
-          ocrText: uploadData.ocrText || '',
-          metadata: {
-            cloudinaryPublicId: uploadData.cloudinaryPublicId,
-            localFilename: uploadData.localFilename
-          },
-          tags: [...new Set([
-            'screenshot',
-            ...tagsInput.value.split(',').map((tag) => tag.trim()).filter(Boolean)
-          ])]
-        })
-      });
-      await readApiResponse(itemResponse);
-
-      statusDiv.textContent = '✅ Screenshot saved to your vault!';
+      statusDiv.textContent = '✅ Screenshot saved. Reading text in the background…';
       statusDiv.className = 'status success';
-      setTimeout(() => window.close(), 1200);
     } catch (err) {
-      statusDiv.textContent = `❌ ${err.message}`;
+      const blocked = /cannot capture|chrome:|extension gallery/i.test(err.message);
+      statusDiv.textContent = `❌ ${blocked ? 'Chrome cannot capture this page. Open a regular website and try again.' : err.message}`;
       statusDiv.className = 'status error';
     } finally {
       saveScreenshotBtn.disabled = false;

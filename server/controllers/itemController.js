@@ -1,6 +1,6 @@
 const Item = require('../models/Item');
 const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
-const { createWorker } = require('tesseract.js');
+const { enqueueItemOcr, recognize } = require('../services/ocrService');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -12,6 +12,54 @@ if (!fs.existsSync(uploadsDir)) {
 
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
+
+async function storeImage(req) {
+  let imageUrl = '';
+  let cloudinaryPublicId = null;
+  let localFilename = null;
+  let storage = 'local';
+
+  if (cloudinaryConfigured) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: `holder/${req.user.id}`,
+            resource_type: 'image',
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+            transformation: [{ width: 2400, height: 2400, crop: 'limit' }]
+          },
+          (error, uploadResult) => (error ? reject(error) : resolve(uploadResult))
+        );
+        stream.end(req.file.buffer);
+      });
+      imageUrl = result.secure_url;
+      cloudinaryPublicId = result.public_id;
+      storage = 'cloudinary';
+    } catch (error) {
+      console.error('[Cloudinary] Image upload failed; falling back to local storage:', error.message);
+    }
+  }
+
+  if (!imageUrl) {
+    const ext = path.extname(req.file.originalname) || '.png';
+    const cleanBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 40) || 'img';
+    localFilename = `img-${cleanBase}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+    await fs.promises.writeFile(path.join(uploadsDir, localFilename), req.file.buffer);
+    const baseUrl = (process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    imageUrl = `${baseUrl}/uploads/${localFilename}`;
+  }
+
+  return {
+    imageUrl,
+    cloudinaryPublicId,
+    localFilename,
+    storage,
+    storageWarning: storage === 'local'
+      ? 'Cloudinary is unavailable, so this image is stored on the server disk.'
+      : ''
+  };
+}
 
 function decodeCursor(cursor) {
   try {
@@ -275,63 +323,70 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No image file uploaded' });
     }
 
-    let imageUrl = '';
-    let cloudinaryPublicId = null;
-    let localFilename = null;
-
-    if (cloudinaryConfigured) {
-      try {
-        const result = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            {
-              folder: `holder/${req.user.id}`,
-              resource_type: 'image',
-              allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-              transformation: [{ width: 2400, height: 2400, crop: 'limit' }]
-            },
-            (error, uploadResult) => (error ? reject(error) : resolve(uploadResult))
-          );
-          stream.end(req.file.buffer);
-        });
-        imageUrl = result.secure_url;
-        cloudinaryPublicId = result.public_id;
-      } catch (cloudErr) {
-        console.warn('Cloudinary upload failed, falling back to local disk:', cloudErr.message);
-      }
-    }
-
-    if (!imageUrl) {
-      const ext = path.extname(req.file.originalname) || '.png';
-      const cleanBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 40) || 'img';
-      localFilename = 'img-' + cleanBase + '-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex') + ext;
-      await fs.promises.writeFile(path.join(uploadsDir, localFilename), req.file.buffer);
-      const baseUrl = (process.env.SERVER_URL || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
-      imageUrl = baseUrl + '/uploads/' + localFilename;
-    }
-
     let ocrText = '';
     if (req.query.ocr === 'true') {
       try {
-        const worker = await createWorker('eng');
-        try {
-          const { data } = await worker.recognize(req.file.buffer);
-          ocrText = data.text.trim();
-        } finally {
-          await worker.terminate();
-        }
+        ocrText = await recognize(req.file.buffer);
       } catch (ocrErr) {
-        console.warn('OCR processing skipped:', ocrErr.message);
+        console.error('[OCR] Synchronous processing failed:', ocrErr.message);
       }
     }
+    const stored = await storeImage(req);
 
     res.json({
       success: true,
-      imageUrl,
+      imageUrl: stored.imageUrl,
       filename: req.file.originalname,
-      cloudinaryPublicId,
-      localFilename,
-      ocrText
+      cloudinaryPublicId: stored.cloudinaryPublicId,
+      localFilename: stored.localFilename,
+      storage: stored.storage,
+      storageWarning: stored.storageWarning,
+      ocrText,
+      ocrStatus: ocrText ? 'done' : 'none'
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Save a screenshot immediately, then read its text in the background.
+exports.createScreenshot = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No screenshot uploaded' });
+    }
+
+    const stored = await storeImage(req);
+    const userTags = String(req.body.tags || '')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    const item = await Item.create({
+      userId: req.user.id,
+      title: String(req.body.title || `Screenshot — ${new Date().toLocaleString()}`).slice(0, 200),
+      type: 'image',
+      folderId: req.body.folderId || null,
+      url: req.body.url || '',
+      content: req.body.content || '',
+      previewUrl: stored.imageUrl,
+      tags: [...new Set(['screenshot', 'quick-clip', ...userTags])],
+      metadata: {
+        ...(req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {}),
+        cloudinaryPublicId: stored.cloudinaryPublicId,
+        localFilename: stored.localFilename
+      },
+      ocrStatus: 'pending'
+    });
+
+    res.status(201).json({
+      success: true,
+      item,
+      storage: stored.storage,
+      storageWarning: stored.storageWarning,
+      message: 'Screenshot saved. Text is being read in the background.'
+    });
+
+    enqueueItemOcr(item._id, req.file.buffer);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -382,7 +437,7 @@ exports.uploadPdf = async (req, res) => {
           cloudinaryPublicId = uploadResult.public_id;
         }
       } catch (cloudErr) {
-        console.warn('Cloudinary PDF upload failed, using local disk storage:', cloudErr.message);
+        console.error('[Cloudinary] PDF upload failed; using local storage:', cloudErr.message);
       }
     }
 

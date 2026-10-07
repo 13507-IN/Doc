@@ -141,6 +141,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       });
 
       if (res.data.success) {
+        if (res.data.storage === 'local') {
+          console.error('[Holder] Cloudinary is unavailable; image was saved to server-local storage.', res.data.storageWarning);
+          setSaveError(res.data.storageWarning || 'Cloudinary is unavailable. This image is stored on the server disk.');
+        }
         setPreviewUrl(res.data.imageUrl);
         setMetadata((current) => ({
           ...current,
@@ -152,6 +156,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
     } catch (err) {
       console.error('Image upload error:', err);
+      setSaveError(err.response?.data?.message || 'Could not upload this image. Please try again.');
     } finally {
       setUploadingImage(false);
     }
@@ -198,7 +203,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
     } catch (err) {
       console.error('PDF upload error:', err);
-      alert(err.response?.data?.message || 'Failed to upload PDF file');
+      setSaveError(err.response?.data?.message || 'Could not upload this PDF. Please try again.');
     } finally {
       setUploadingPdf(false);
     }
@@ -209,7 +214,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     if (!title) return;
 
     if (activeTab === 'pdf' && !url) {
-      alert('Please upload a PDF document or enter a PDF URL before saving.');
+      setSaveError('Please upload a PDF document or enter a PDF URL before saving.');
       return;
     }
 

@@ -28,6 +28,12 @@ exports.register = async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+    }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -53,7 +59,8 @@ exports.register = async (req, res) => {
       user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('[Auth] Registration failed:', error.message);
+    res.status(500).json({ success: false, message: 'Could not create your account. Please try again.' });
   }
 };
 
@@ -88,7 +95,8 @@ exports.login = async (req, res) => {
       user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('[Auth] Login failed:', error.message);
+    res.status(500).json({ success: false, message: 'Could not sign you in. Please try again.' });
   }
 };
 

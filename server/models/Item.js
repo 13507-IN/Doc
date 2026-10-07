@@ -33,6 +33,15 @@ const itemSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  ocrStatus: {
+    type: String,
+    enum: ['none', 'pending', 'processing', 'done', 'failed'],
+    default: 'none'
+  },
+  ocrError: {
+    type: String,
+    default: ''
+  },
   previewUrl: {
     type: String,
     default: ''

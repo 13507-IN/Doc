@@ -154,6 +154,14 @@ export default function Home() {
 
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
+  // A screenshot appears immediately; refresh only while OCR is still running.
+  useEffect(() => {
+    const hasPendingOcr = items.some((item) => ['pending', 'processing'].includes(item.ocrStatus));
+    if (!hasPendingOcr) return undefined;
+    const timer = window.setInterval(() => fetchItems(), 4500);
+    return () => window.clearInterval(timer);
+  }, [items, fetchItems]);
+
   useEffect(() => {
     const listener = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {

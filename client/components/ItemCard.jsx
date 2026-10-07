@@ -232,6 +232,18 @@ export default function ItemCard({
               {getTypeIcon(item.type)}
               {item.type}
             </span>
+            {item.type === 'image' && item.ocrStatus && item.ocrStatus !== 'none' && (
+              <span style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                padding: '3px 6px',
+                borderRadius: '999px',
+                color: item.ocrStatus === 'done' ? '#6ee7b7' : item.ocrStatus === 'failed' ? '#fca5a5' : '#fcd34d',
+                background: item.ocrStatus === 'done' ? 'rgba(16,185,129,.12)' : item.ocrStatus === 'failed' ? 'rgba(239,68,68,.12)' : 'rgba(245,158,11,.12)'
+              }}>
+                {item.ocrStatus === 'done' ? 'Text indexed' : item.ocrStatus === 'failed' ? 'OCR failed' : 'Reading text…'}
+              </span>
+            )}
 
             {item.folderId && (
               <span style={{

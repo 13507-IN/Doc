@@ -96,25 +96,18 @@ async function saveScreenshot(tab) {
   const blob = await (await fetch(dataUrl)).blob();
   const formData = new FormData();
   formData.append('image', blob, `screenshot-${Date.now()}.png`);
-  const uploadResponse = await fetch(`${apiBase}/items/upload-image?ocr=true`, {
+  formData.append('title', `Screenshot — ${tab.title || new Date().toLocaleString()}`);
+  formData.append('url', tab.url || '');
+  const uploadResponse = await fetch(`${apiBase}/items/screenshot`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData
   });
-  const upload = await uploadResponse.json();
-  if (!uploadResponse.ok || !upload.success) throw new Error(upload.message || 'Screenshot upload failed');
-  await saveItem({
-    title: `Screenshot — ${tab.title || new Date().toLocaleString()}`,
-    type: 'image',
-    url: tab.url || '',
-    previewUrl: upload.imageUrl,
-    ocrText: upload.ocrText || '',
-    tags: ['screenshot', 'quick-clip'],
-    metadata: {
-      cloudinaryPublicId: upload.cloudinaryPublicId,
-      localFilename: upload.localFilename
-    }
-  });
+  const screenshot = await uploadResponse.json();
+  if (!uploadResponse.ok || !screenshot.success) throw new Error(screenshot.message || 'Screenshot upload failed');
+  if (screenshot.storage === 'local') {
+    console.error('[Holder] Cloudinary is unavailable; screenshot was saved to server-local storage.', screenshot.storageWarning);
+  }
   showResult('✓');
 }
 

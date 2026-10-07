@@ -77,6 +77,7 @@ router.delete('/items/:id', authMiddleware, itemController.deleteItem);
 router.patch('/items/:id/favorite', authMiddleware, itemController.toggleFavorite);
 router.patch('/items/:id/pin', authMiddleware, itemController.togglePin);
 router.post('/items/upload-image', authMiddleware, upload.single('image'), itemController.uploadImage);
+router.post('/items/screenshot', authMiddleware, upload.single('image'), itemController.createScreenshot);
 router.post('/items/upload-pdf', authMiddleware, uploadPdf.single('pdf'), itemController.uploadPdf);
 
 // Multer otherwise falls through to Express's HTML error page. API clients
