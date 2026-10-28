@@ -39,16 +39,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusDiv = document.getElementById('status');
   const saveScreenshotBtn = document.getElementById('saveScreenshotBtn');
   const screenshotPreview = document.getElementById('screenshotPreview');
-  const profileSelect = document.getElementById('profileSelect');
-  const previewFillBtn = document.getElementById('previewFillBtn');
-  const applyFillBtn = document.getElementById('applyFillBtn');
-  const createProfileBtn = document.getElementById('createProfileBtn');
-  const profileEditor = document.getElementById('profileEditor');
-  const profileNameInput = document.getElementById('profileName');
-  const profileCategoryInput = document.getElementById('profileCategory');
-  const profileFieldsInput = document.getElementById('profileFields');
-  const saveProfileBtn = document.getElementById('saveProfileBtn');
-  let profileMappings = [];
 
   // Load configured API Server URL from chrome.storage.local
   chrome.storage.local.get(['holder_server_url'], (res) => {
@@ -195,95 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     loadFoldersAndTab(token);
-    loadProfiles(token);
   }
-
-  async function loadProfiles(token) {
-    try {
-      const response = await fetch(`${API_BASE}/profiles`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await response.json();
-      profileSelect.innerHTML = '<option value="">Choose a saved form profile…</option>';
-      (data.profiles || []).forEach((profile) => {
-        const option = document.createElement('option');
-        option.value = profile._id;
-        option.textContent = `${profile.name} (${profile.category})`;
-        option.dataset.fields = JSON.stringify(profile.fields || {});
-        profileSelect.appendChild(option);
-      });
-    } catch {}
-  }
-
-  async function requestFormFill(type) {
-    const option = profileSelect.options[profileSelect.selectedIndex];
-    if (!option?.value) throw new Error('Choose a profile first');
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return chrome.tabs.sendMessage(tab.id, { type, profile: JSON.parse(option.dataset.fields || '{}') });
-  }
-
-  previewFillBtn.addEventListener('click', async () => {
-    try {
-      const response = await requestFormFill('PREVIEW_PROFILE_FILL');
-      profileMappings = response.mappings || [];
-      statusDiv.textContent = profileMappings.length ? `Preview: ${profileMappings.length} fields will be filled. Click Apply to approve.` : 'No matching form fields found.';
-      statusDiv.className = 'status';
-      applyFillBtn.disabled = !profileMappings.length;
-    } catch (error) {
-      statusDiv.textContent = `❌ ${error.message}`;
-      statusDiv.className = 'status error';
-    }
-  });
-
-  applyFillBtn.addEventListener('click', async () => {
-    try {
-      if (!profileMappings.length) throw new Error('Preview the form fill first');
-      const response = await requestFormFill('FILL_PROFILE');
-      statusDiv.textContent = `✅ Filled ${response.filled} fields. Nothing was submitted.`;
-      statusDiv.className = 'status success';
-    } catch (error) {
-      statusDiv.textContent = `❌ ${error.message}`;
-      statusDiv.className = 'status error';
-    }
-  });
-
-  createProfileBtn.addEventListener('click', () => {
-    profileEditor.classList.toggle('hidden');
-    if (!profileEditor.classList.contains('hidden')) profileNameInput.focus();
-  });
-
-  saveProfileBtn.addEventListener('click', async () => {
-    const name = profileNameInput.value.trim();
-    const fields = Object.fromEntries(
-      profileFieldsInput.value
-        .split('\n')
-        .map((line) => line.split(/:(.+)/))
-        .map(([key, value]) => [key?.trim(), value?.trim()])
-        .filter(([key, value]) => key && value)
-    );
-    if (!name || !Object.keys(fields).length) {
-      statusDiv.textContent = '❌ Add a profile name and at least one “Field: value” line.';
-      statusDiv.className = 'status error';
-      return;
-    }
-    try {
-      const { holder_token: token } = await chrome.storage.local.get(['holder_token']);
-      const response = await fetch(`${API_BASE}/profiles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, category: profileCategoryInput.value.trim() || 'personal', fields })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.message || 'Could not save profile');
-      await loadProfiles(token);
-      profileNameInput.value = '';
-      profileFieldsInput.value = '';
-      profileEditor.classList.add('hidden');
-      statusDiv.textContent = '✅ Profile saved.';
-      statusDiv.className = 'status success';
-    } catch (error) {
-      statusDiv.textContent = `❌ ${error.message || 'Could not save this profile.'}`;
-      statusDiv.className = 'status error';
-    }
-  });
 
   // Handle Manual Login inside Popup
   loginForm.addEventListener('submit', async (e) => {
