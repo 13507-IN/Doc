@@ -12,6 +12,7 @@ import YouTubeModal from '../components/YouTubeModal';
 import ImageModal from '../components/ImageModal';
 import PdfModal from '../components/PdfModal';
 import CommandPalette from '../components/CommandPalette';
+import MobileBottomNav from '../components/MobileBottomNav';
 import { Plus, SearchX } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -39,6 +40,7 @@ export default function Home() {
   const [copiedUrl, setCopiedUrl] = useState('');
   const [dismissedCopiedUrl, setDismissedCopiedUrl] = useState('');
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
@@ -294,6 +296,8 @@ export default function Home() {
         uncategorizedCount={uncategorizedCount}
         user={user}
         onLogout={handleLogout}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -307,10 +311,11 @@ export default function Home() {
           activeFolderName={activeFolderName}
           totalItems={items.length}
           onRefresh={() => { fetchItems(); fetchFolders(); }}
+          onToggleMobileMenu={() => setIsMobileSidebarOpen(prev => !prev)}
         />
 
         {/* Content Container */}
-        <div style={{ padding: '28px', flex: 1, overflowY: 'auto' }}>
+        <div className="main-content-padding" style={{ overflowY: 'auto' }}>
           
           {/* Active Folder Header Banner */}
           {activeFolderObj && (
@@ -412,11 +417,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
-                gap: '20px'
-              }}>
+              <div className="items-grid">
                 {items.map((item) => (
                   <ItemCard
                     key={item._id}
@@ -514,12 +515,26 @@ export default function Home() {
         }}
       />
 
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileBottomNav 
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'all') setActiveFolder('all');
+        }}
+        onOpenFolders={() => setIsMobileSidebarOpen(true)}
+        onOpenAddItem={() => {
+          setEditingItem(null);
+          setPrefillUrl('');
+          setIsAddItemOpen(true);
+        }}
+        onToggleAssistant={() => setIsAssistantOpen(prev => !prev)}
+      />
+
       {/* Floating Copied Link Quick-Capture Pill */}
       {copiedUrl && (
-        <div className="glass-panel animate-scale-in" style={{
+        <div className="glass-panel animate-scale-in floating-clipboard-pill" style={{
           position: 'fixed',
-          bottom: '24px',
-          right: '24px',
           zIndex: 60,
           borderRadius: '14px',
           padding: '12px 16px',

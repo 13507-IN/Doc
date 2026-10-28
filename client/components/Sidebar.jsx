@@ -2,7 +2,7 @@
 import React from 'react';
 import { 
   Folder, Plus, Sparkles, Layers, 
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut, X
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -17,51 +17,73 @@ export default function Sidebar({
   onOpenAssistant,
   uncategorizedCount = 0,
   user,
-  onLogout
+  onLogout,
+  isMobileOpen = false,
+  onCloseMobile
 }) {
   const visibleFolders = activeFolder === 'all'
     ? folders
     : folders.filter((folder) => folder._id === activeFolder);
 
+  const handleFolderClick = (fId) => {
+    onSelectFolder(fId);
+    if (onCloseMobile) onCloseMobile();
+  };
+
+  const handleTabClick = (tab) => {
+    onSelectTab(tab);
+    if (onCloseMobile) onCloseMobile();
+  };
+
+  const handleTypeClick = (type) => {
+    onSelectType(type);
+    if (onCloseMobile) onCloseMobile();
+  };
+
   return (
-    <aside style={{
-      width: '270px',
-      minWidth: '270px',
-      height: '100vh',
-      position: 'sticky',
-      top: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      borderRight: '1px solid var(--border-color)',
-      padding: '20px 14px',
-      gap: '18px',
-      background: 'var(--bg-secondary)',
-      zIndex: 40
-    }}>
-      {/* Brand Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: 'var(--accent-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
-          }}>
-            <Sparkles size={18} />
+    <>
+      {isMobileOpen && (
+        <div 
+          className="mobile-sidebar-backdrop" 
+          onClick={onCloseMobile} 
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`sidebar-container ${isMobileOpen ? 'mobile-open' : ''}`}>
+        {/* Brand Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: 'var(--accent-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
+            }}>
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
+                HOLDER
+              </h1>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Personal Assistant Vault</p>
+            </div>
           </div>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
-              HOLDER
-            </h1>
-            <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Personal Assistant Vault</p>
-          </div>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="mobile-sidebar-close-btn"
+              title="Close Menu"
+              aria-label="Close Menu"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
-      </div>
 
       {/* AI Assistant Button */}
       <button 
@@ -102,14 +124,14 @@ export default function Sidebar({
 
         <SidebarNavItem 
           active={activeTab === 'all' && activeFolder === 'all'} 
-          onClick={() => { onSelectTab('all'); onSelectFolder('all'); }}
+          onClick={() => { handleTabClick('all'); handleFolderClick('all'); }}
           icon={<Layers size={16} />}
           label="All Vault Items"
         />
 
         <SidebarNavItem 
           active={activeTab === 'favorites'} 
-          onClick={() => onSelectTab('favorites')}
+          onClick={() => handleTabClick('favorites')}
           icon={<Star size={16} color="#d97706" />}
           label="Favorites"
         />
@@ -122,7 +144,7 @@ export default function Sidebar({
             Folders
           </p>
           <button 
-            onClick={onOpenAddFolder}
+            onClick={() => { onOpenAddFolder(); if (onCloseMobile) onCloseMobile(); }}
             title="Create New Folder"
             style={{
               background: 'transparent',
@@ -143,7 +165,7 @@ export default function Sidebar({
 
         <SidebarNavItem 
           active={activeFolder === 'all'} 
-          onClick={() => onSelectFolder('all')}
+          onClick={() => handleFolderClick('all')}
           icon={<Folder size={16} color="#2563eb" />}
           label="All Folders"
         />
@@ -152,7 +174,7 @@ export default function Sidebar({
           <SidebarNavItem 
             key={folder._id}
             active={activeFolder === folder._id}
-            onClick={() => onSelectFolder(folder._id)}
+            onClick={() => handleFolderClick(folder._id)}
             icon={<span style={{ fontSize: '14px' }}>{folder.icon || '📁'}</span>}
             label={folder.name}
             count={folder.itemCount}
@@ -163,7 +185,7 @@ export default function Sidebar({
 
         <SidebarNavItem 
           active={activeFolder === 'uncategorized'} 
-          onClick={() => onSelectFolder('uncategorized')}
+          onClick={() => handleFolderClick('uncategorized')}
           icon={<Bookmark size={16} color="#94a3b8" />}
           label="Uncategorized"
           count={uncategorizedCount}
@@ -176,12 +198,12 @@ export default function Sidebar({
           Item Types
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
-          <TypeFilterBtn active={activeType === 'all'} onClick={() => onSelectType('all')} label="All" />
-          <TypeFilterBtn active={activeType === 'youtube'} onClick={() => onSelectType('youtube')} icon={<Tv size={13} color="#dc2626" />} label="YouTube" />
-          <TypeFilterBtn active={activeType === 'image'} onClick={() => onSelectType('image')} icon={<ImageIcon size={13} color="#059669" />} label="Images" />
-          <TypeFilterBtn active={activeType === 'pdf'} onClick={() => onSelectType('pdf')} icon={<FileText size={13} color="#f43f5e" />} label="PDFs" />
-          <TypeFilterBtn active={activeType === 'link'} onClick={() => onSelectType('link')} icon={<LinkIcon size={13} color="#2563eb" />} label="Links" />
-          <TypeFilterBtn active={activeType === 'note'} onClick={() => onSelectType('note')} icon={<FileText size={13} color="#d97706" />} label="Notes" />
+          <TypeFilterBtn active={activeType === 'all'} onClick={() => handleTypeClick('all')} label="All" />
+          <TypeFilterBtn active={activeType === 'youtube'} onClick={() => handleTypeClick('youtube')} icon={<Tv size={13} color="#dc2626" />} label="YouTube" />
+          <TypeFilterBtn active={activeType === 'image'} onClick={() => handleTypeClick('image')} icon={<ImageIcon size={13} color="#059669" />} label="Images" />
+          <TypeFilterBtn active={activeType === 'pdf'} onClick={() => handleTypeClick('pdf')} icon={<FileText size={13} color="#f43f5e" />} label="PDFs" />
+          <TypeFilterBtn active={activeType === 'link'} onClick={() => handleTypeClick('link')} icon={<LinkIcon size={13} color="#2563eb" />} label="Links" />
+          <TypeFilterBtn active={activeType === 'note'} onClick={() => handleTypeClick('note')} icon={<FileText size={13} color="#d97706" />} label="Notes" />
         </div>
       </div>
 
@@ -240,6 +262,7 @@ export default function Sidebar({
         </div>
       )}
     </aside>
+    </>
   );
 }
 

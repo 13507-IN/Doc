@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, Plus, Sparkles, RefreshCw } from 'lucide-react';
+import { Search, Plus, Sparkles, RefreshCw, Menu } from 'lucide-react';
 
 export default function Navbar({ 
   searchQuery, 
@@ -9,60 +9,42 @@ export default function Navbar({
   onToggleAssistant,
   activeFolderName,
   totalItems = 0,
-  onRefresh
+  onRefresh,
+  onToggleMobileMenu
 }) {
   return (
-    <header style={{
-      height: '66px',
-      padding: '0 28px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      borderBottom: '1px solid var(--border-color)',
-      background: 'var(--bg-secondary)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 30
-    }}>
+    <header className="navbar-header">
       {/* Current Context / Title */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
-          {activeFolderName || 'All Vault Items'}
-        </h2>
-        <span style={{
-          background: 'var(--bg-primary)',
-          color: '#93c5fd',
-          border: '1px solid var(--border-color)',
-          padding: '2px 9px',
-          borderRadius: '12px',
-          fontSize: '12px',
-          fontWeight: 600
-        }}>
-          {totalItems} items
-        </span>
-        <button
-          onClick={onRefresh}
-          title="Refresh Data"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-dim)',
-            cursor: 'pointer',
-            padding: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: '6px',
-            transition: 'color 0.15s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
-        >
-          <RefreshCw size={14} />
-        </button>
+      <div className="navbar-context">
+        {onToggleMobileMenu && (
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            onClick={onToggleMobileMenu}
+            aria-label="Open Folders and Navigation Menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' }}>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+            {activeFolderName || 'All Vault Items'}
+          </h2>
+          <span className="navbar-item-count-badge">
+            {totalItems}
+          </span>
+          <button
+            onClick={onRefresh}
+            title="Refresh Data"
+            className="navbar-refresh-btn"
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Search Input Bar */}
-      <div style={{ position: 'relative', width: '380px' }}>
+      <div className="navbar-search-wrapper">
         <Search 
           size={16} 
           color="var(--text-muted)" 
@@ -72,7 +54,7 @@ export default function Navbar({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search YouTube videos, PDFs, images, links, notes, tags..."
+          placeholder="Search videos, PDFs, images, notes..."
           className="glass-input"
           style={{
             width: '100%',
@@ -100,81 +82,30 @@ export default function Navbar({
             ✕
           </button>
         ) : (
-          <span style={{
-            position: 'absolute',
-            right: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontSize: '10px',
-            color: 'var(--text-dim)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '4px',
-            padding: '1px 5px',
-            background: 'var(--bg-secondary)',
-            fontFamily: 'monospace'
-          }}>
+          <span className="navbar-cmd-k">
             ⌘K
           </span>
         )}
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="navbar-actions">
         <button 
           onClick={onOpenAddItem}
-          style={{
-            padding: '9px 16px',
-            borderRadius: '8px',
-            background: 'var(--accent-primary)',
-            color: '#fff',
-            border: 'none',
-            fontWeight: 600,
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#1d4ed8';
-            e.currentTarget.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'var(--accent-primary)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
+          className="navbar-btn-primary"
+          title="Save Item"
         >
           <Plus size={16} />
-          <span>Save Item</span>
+          <span className="navbar-btn-label">Save Item</span>
         </button>
 
         <button 
           onClick={onToggleAssistant}
-          style={{
-            padding: '9px 14px',
-            borderRadius: '8px',
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            color: '#60a5fa',
-            fontWeight: 600,
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--accent-primary)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-color)';
-          }}
+          className="navbar-btn-assistant"
+          title="AI Assistant"
         >
           <Sparkles size={15} color="#3b82f6" />
-          <span>AI Assistant</span>
+          <span className="navbar-btn-label">AI Assistant</span>
         </button>
       </div>
     </header>
