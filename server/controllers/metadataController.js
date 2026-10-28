@@ -75,6 +75,51 @@ function extractYouTubeId(url) {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
+function generateSmartTags(url, title = '', description = '', type = 'link', authorName = '') {
+  const tags = new Set();
+  const text = `${title} ${description} ${authorName}`.toLowerCase();
+
+  if (type === 'youtube') {
+    tags.add('youtube');
+    tags.add('video');
+    if (authorName) {
+      const cleanAuthor = authorName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanAuthor) tags.add(cleanAuthor);
+    }
+  }
+
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '');
+    const domainPrefix = hostname.split('.')[0];
+    if (domainPrefix && domainPrefix.length > 2 && !['com', 'org', 'net', 'io'].includes(domainPrefix)) {
+      tags.add(domainPrefix);
+    }
+  } catch {}
+
+  const topics = [
+    { tag: 'ai', pattern: /\b(ai|llm|gpt|openai|machine learning|deep learning|gemini|claude)\b/i },
+    { tag: 'design', pattern: /\b(design|ui|ux|figma|typography|dribbble|palette|brand|logo)\b/i },
+    { tag: 'code', pattern: /\b(github|code|programming|javascript|python|react|nextjs|developer|api|dev)\b/i },
+    { tag: 'tutorial', pattern: /\b(how to|guide|tutorial|crash course|step by step|learn|course)\b/i },
+    { tag: 'business', pattern: /\b(startup|finance|revenue|marketing|saas|founder|growth)\b/i },
+    { tag: 'productivity', pattern: /\b(productivity|workflow|tools|tips|system|vault)\b/i },
+    { tag: 'docs', pattern: /\b(documentation|docs|reference|cheatsheet|spec)\b/i }
+  ];
+
+  for (const { tag, pattern } of topics) {
+    if (pattern.test(text)) tags.add(tag);
+  }
+
+  return Array.from(tags).slice(0, 6);
+}
+
+function generateSmartSummary(description = '') {
+  if (!description || description.trim().length < 20) return '';
+  const sentences = description.replace(/\s+/g, ' ').split(/[.!?]\s+/).filter(s => s.trim().length > 15);
+  if (!sentences.length) return description.trim().slice(0, 240);
+  return sentences.slice(0, 3).map(s => `• ${s.trim()}`).join('\n');
+}
+
 // Extract rich metadata from a URL (YouTube video or website)
 exports.extractMetadata = async (req, res) => {
   try {
@@ -123,17 +168,23 @@ exports.extractMetadata = async (req, res) => {
         const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`;
         const { data } = await axios.get(oembedUrl, { timeout: 5000 });
 
+        const rawTitle = data.title || 'YouTube Video';
+        const authorName = data.author_name || '';
+        const suggestedTags = generateSmartTags(parsedUrl.href, rawTitle, '', 'youtube', authorName);
+
         const responsePayload = {
           success: true,
           type: 'youtube',
           youtubeId,
-          title: data.title || 'YouTube Video',
-          authorName: data.author_name || '',
+          title: rawTitle,
+          authorName,
           previewUrl: `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
           fallbackPreviewUrl: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
           embedUrl: `https://www.youtube.com/embed/${youtubeId}?autoplay=1`,
+          suggestedTags,
+          suggestedFolderType: 'youtube',
           metadata: {
-            authorName: data.author_name,
+            authorName,
             authorUrl: data.author_url,
             html: data.html
           }
@@ -142,6 +193,7 @@ exports.extractMetadata = async (req, res) => {
         return res.json(responsePayload);
       } catch (err) {
         // Fallback for YouTube
+        const fallbackTags = generateSmartTags(parsedUrl.href, 'YouTube Video', '', 'youtube', '');
         return res.json({
           success: true,
           type: 'youtube',
@@ -149,6 +201,8 @@ exports.extractMetadata = async (req, res) => {
           title: 'YouTube Video',
           previewUrl: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
           embedUrl: `https://www.youtube.com/embed/${youtubeId}?autoplay=1`,
+          suggestedTags: fallbackTags,
+          suggestedFolderType: 'youtube',
           metadata: {}
         });
       }
@@ -181,19 +235,31 @@ exports.extractMetadata = async (req, res) => {
 
       const siteName = $('meta[property="og:site_name"]').attr('content') || parsedUrl.hostname;
 
+      const cleanTitle = title.trim();
+      const cleanDesc = description.trim();
+      const suggestedTags = generateSmartTags(parsedUrl.href, cleanTitle, cleanDesc, 'link', siteName);
+      const smartSummary = generateSmartSummary(cleanDesc);
+
+      const isBrandAsset = /\b(figma|dribbble|behance|logo|brand|design system|colors)\b/i.test(`${cleanTitle} ${cleanDesc} ${parsedUrl.hostname}`);
+      const suggestedFolderType = isBrandAsset ? 'brand' : 'web';
+
       const responsePayload = {
         success: true,
         type: 'link',
-        title: title.trim(),
-        description: description.trim(),
+        title: cleanTitle,
+        description: cleanDesc,
         previewUrl,
         siteName,
-        metadata: { siteName, description }
+        suggestedTags,
+        smartSummary,
+        suggestedFolderType,
+        metadata: { siteName, description: cleanDesc, smartSummary }
       };
       cacheMetadata(parsedUrl.href, responsePayload);
       return res.json(responsePayload);
     } catch (err) {
       const hostname = parsedUrl.hostname;
+      const fallbackTags = generateSmartTags(parsedUrl.href, hostname, '', 'link');
       return res.json({
         success: true,
         type: 'link',
@@ -201,6 +267,8 @@ exports.extractMetadata = async (req, res) => {
         description: '',
         previewUrl: '',
         siteName: hostname,
+        suggestedTags: fallbackTags,
+        suggestedFolderType: 'web',
         metadata: { siteName: hostname }
       });
     }

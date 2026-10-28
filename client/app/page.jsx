@@ -35,6 +35,9 @@ export default function Home() {
 
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [prefillUrl, setPrefillUrl] = useState('');
+  const [copiedUrl, setCopiedUrl] = useState('');
+  const [dismissedCopiedUrl, setDismissedCopiedUrl] = useState('');
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -93,6 +96,33 @@ export default function Home() {
     setFolders([]);
     setIsAuthOpen(true);
   };
+
+  // Clipboard auto-detection: check for copied URL when window is focused
+  useEffect(() => {
+    if (!token) return;
+
+    const checkClipboard = async () => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.readText) {
+          const clipText = await navigator.clipboard.readText();
+          if (clipText && (clipText.startsWith('http://') || clipText.startsWith('https://'))) {
+            const clean = clipText.trim();
+            if (clean !== dismissedCopiedUrl && clean !== copiedUrl) {
+              const alreadyPresent = items.some(item => item.url === clean);
+              if (!alreadyPresent) {
+                setCopiedUrl(clean);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Permission dismissed or not granted; fail silently
+      }
+    };
+
+    window.addEventListener('focus', checkClipboard);
+    return () => window.removeEventListener('focus', checkClipboard);
+  }, [token, items, dismissedCopiedUrl, copiedUrl]);
 
   // Fetch Folders
   const fetchFolders = useCallback(async () => {
@@ -430,14 +460,17 @@ export default function Home() {
         onClose={() => {
           setIsAddItemOpen(false);
           setEditingItem(null);
+          setPrefillUrl('');
         }}
         folders={folders}
         defaultFolderId={activeFolder}
         editingItem={editingItem}
+        prefillUrl={prefillUrl}
         onItemAdded={() => {
           fetchItems();
           fetchFolders();
           setEditingItem(null);
+          setPrefillUrl('');
         }}
         token={token}
       />
@@ -480,6 +513,85 @@ export default function Home() {
           handleEditItem(item);
         }}
       />
+
+      {/* Floating Copied Link Quick-Capture Pill */}
+      {copiedUrl && (
+        <div className="glass-panel animate-scale-in" style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 60,
+          borderRadius: '14px',
+          padding: '12px 16px',
+          border: '1px solid var(--accent-primary)',
+          background: 'rgba(15, 23, 42, 0.95)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          maxWidth: '440px'
+        }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'rgba(37, 99, 235, 0.2)',
+            color: '#60a5fa',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            fontSize: '15px'
+          }}>
+            📋
+          </div>
+          <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
+              Copied Link Detected
+            </p>
+            <p style={{ fontSize: '12px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {copiedUrl}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setPrefillUrl(copiedUrl);
+              setCopiedUrl('');
+              setIsAddItemOpen(true);
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Save to Vault
+          </button>
+          <button
+            onClick={() => {
+              setDismissedCopiedUrl(copiedUrl);
+              setCopiedUrl('');
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              fontSize: '14px',
+              padding: '2px'
+            }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

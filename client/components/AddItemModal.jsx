@@ -1,14 +1,14 @@
-﻿'use client';
+'use client';
 import React, { useState, useEffect } from 'react';
 import { 
   X, Tv, Image as ImageIcon, Link as LinkIcon, FileText, 
-  Upload, Lock
+  Upload, Lock, AlertCircle
 } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, editingItem, token }) {
+export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, editingItem, prefillUrl, token }) {
   const [activeTab, setActiveTab] = useState('youtube'); // youtube | image | pdf | link | note
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -30,6 +30,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState('');
 
   const isEditing = Boolean(editingItem);
 
@@ -63,6 +64,54 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         return;
       }
 
+      if (prefillUrl) {
+        const isYt = prefillUrl.includes('youtube.com') || prefillUrl.includes('youtu.be');
+        const isPdf = prefillUrl.toLowerCase().endsWith('.pdf');
+        setActiveTab(isYt ? 'youtube' : (isPdf ? 'pdf' : 'link'));
+        setUrl(prefillUrl);
+        setTitle('');
+        setContent('');
+        setTags(isYt ? 'youtube, video' : 'link');
+        setFolderId(
+          defaultFolderId && defaultFolderId !== 'all' && defaultFolderId !== 'uncategorized'
+            ? defaultFolderId
+            : ''
+        );
+        setIsPrivate(false);
+        setPreviewUrl('');
+        setMetadata({});
+        setExpiresAt('');
+        setReminderDays(30);
+        setOcrText('');
+        setPdfFileName('');
+        setPdfFileSize('');
+        setSaveError('');
+        setDuplicateWarning('');
+
+        // Auto-extract metadata for prefilled URL
+        axios.post(`${API_BASE}/metadata/extract`, { url: prefillUrl }).then(res => {
+          if (res.data.success) {
+            setTitle(res.data.title || '');
+            setPreviewUrl(res.data.previewUrl || '');
+            setMetadata(res.data.metadata || {});
+            if (res.data.suggestedTags?.length > 0) setTags(res.data.suggestedTags.join(', '));
+            if (folders && folders.length > 0) {
+              if (res.data.suggestedFolderType === 'youtube') {
+                const match = folders.find(f => /youtube|learning|video/i.test(f.name));
+                if (match) setFolderId(match._id);
+              } else if (res.data.suggestedFolderType === 'brand') {
+                const match = folders.find(f => /brand|asset|design/i.test(f.name));
+                if (match) setFolderId(match._id);
+              } else if (res.data.suggestedFolderType === 'web') {
+                const match = folders.find(f => /bookmark|web|link/i.test(f.name));
+                if (match) setFolderId(match._id);
+              }
+            }
+          }
+        }).catch(() => {});
+        return;
+      }
+
       setActiveTab('youtube');
       setUrl('');
       setTitle('');
@@ -82,9 +131,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       setPdfFileName('');
       setPdfFileSize('');
       setSaveError('');
+      setDuplicateWarning('');
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [defaultFolderId, editingItem, isOpen]);
+  }, [defaultFolderId, editingItem, prefillUrl, isOpen]);
 
   // Handle URL change & auto extract metadata
   const handleUrlBlur = async () => {
@@ -114,6 +164,25 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           setActiveTab('youtube');
         } else if (res.data.type === 'pdf' && activeTab !== 'pdf') {
           setActiveTab('pdf');
+        }
+
+        // Auto-suggest tags if tags field is empty
+        if (!tags && res.data.suggestedTags?.length > 0) {
+          setTags(res.data.suggestedTags.join(', '));
+        }
+
+        // Auto-select folder if not explicitly chosen
+        if (!folderId && folders.length > 0) {
+          if (res.data.suggestedFolderType === 'youtube') {
+            const match = folders.find(f => /youtube|learning|video/i.test(f.name));
+            if (match) setFolderId(match._id);
+          } else if (res.data.suggestedFolderType === 'brand') {
+            const match = folders.find(f => /brand|asset|design/i.test(f.name));
+            if (match) setFolderId(match._id);
+          } else if (res.data.suggestedFolderType === 'web') {
+            const match = folders.find(f => /bookmark|web|link/i.test(f.name));
+            if (match) setFolderId(match._id);
+          }
         }
       }
     } catch (err) {
@@ -209,8 +278,8 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, forceSave = false) => {
+    if (e) e.preventDefault();
     if (!title) return;
 
     if (activeTab === 'pdf' && !url) {
@@ -220,6 +289,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
 
     try {
       setSaveError('');
+      setDuplicateWarning('');
       setSubmitting(true);
 
       const payload = {
@@ -234,7 +304,8 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         metadata,
         expiresAt: expiresAt || null,
         reminderDays: Number(reminderDays) || 30,
-        ocrText
+        ocrText,
+        allowDuplicate: Boolean(forceSave)
       };
 
       const request = isEditing
@@ -253,7 +324,11 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
     } catch (err) {
       console.error('Error creating item:', err);
-      setSaveError(err.response?.data?.message || 'Could not save this item. Please try again.');
+      if (err.response?.status === 409 && err.response?.data?.isDuplicate) {
+        setDuplicateWarning(err.response.data.message);
+      } else {
+        setSaveError(err.response?.data?.message || 'Could not save this item. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -619,6 +694,44 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
               <input type="number" min="0" max="365" value={reminderDays} onChange={(e) => setReminderDays(e.target.value)} className="glass-input" style={{ width: '100%' }} />
             </div>
           </div>
+
+          {duplicateWarning && (
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              background: 'rgba(217, 119, 6, 0.15)',
+              border: '1px solid rgba(217, 119, 6, 0.4)',
+              color: '#fde047',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              marginTop: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                <span>{duplicateWarning}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSubmit(null, true)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  background: '#d97706',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Save Anyway
+              </button>
+            </div>
+          )}
 
           {/* Submit */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>

@@ -157,6 +157,7 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                 color: '#fff',
                 fontSize: '13px',
                 lineHeight: '1.5',
+                whiteSpace: 'pre-wrap',
                 border: msg.role === 'user' ? 'none' : '1px solid var(--border-color)'
               }}>
                 {msg.text}

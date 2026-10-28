@@ -181,6 +181,26 @@ exports.createItem = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title and type are required' });
     }
 
+    // Check for existing duplicate URL for this user (unless allowDuplicate is explicitly true)
+    if (url && url.trim() && !req.body.allowDuplicate) {
+      const normalizedUrl = url.trim().replace(/\/$/, '');
+      const existing = await Item.findOne({ 
+        userId, 
+        url: { $regex: `^${normalizedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`, $options: 'i' } 
+      }).populate('folderId', 'name icon color');
+
+      if (existing) {
+        const folderName = existing.folderId?.name || 'Uncategorized';
+        const savedDate = new Date(existing.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return res.status(409).json({
+          success: false,
+          isDuplicate: true,
+          message: `Already in your vault in "${folderName}" (saved on ${savedDate})`,
+          existingItem: existing
+        });
+      }
+    }
+
     const processedTags = Array.isArray(tags) 
       ? tags.map(t => t.trim()).filter(Boolean)
       : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);

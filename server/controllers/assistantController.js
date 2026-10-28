@@ -88,20 +88,73 @@ exports.queryAssistant = async (req, res) => {
     matchedItems = await Item.find(itemQuery)
       .populate('folderId', 'name icon color')
       .sort({ pinned: -1, createdAt: -1 })
-      .limit(30)
+      .limit(35)
       .lean();
+
+    // AI Relevance Ranking
+    if (keywordTerms.length > 0 && matchedItems.length > 0) {
+      matchedItems.forEach(item => {
+        let score = 0;
+        const lowerTitle = (item.title || '').toLowerCase();
+        const lowerContent = (item.content || '').toLowerCase();
+        const lowerOcr = (item.ocrText || '').toLowerCase();
+        const lowerTags = (item.tags || []).map(t => t.toLowerCase());
+
+        if (lowerTitle.includes(cleanQuery)) score += 25;
+
+        keywordTerms.forEach(term => {
+          if (lowerTitle.includes(term)) score += 12;
+          if (lowerTags.some(t => t.includes(term))) score += 8;
+          if (lowerOcr.includes(term)) score += 8;
+          if (lowerContent.includes(term)) score += 6;
+        });
+
+        if (item.pinned) score += 5;
+        if (item.isFavorite) score += 3;
+        item._relevanceScore = score;
+      });
+
+      matchedItems.sort((a, b) => (b._relevanceScore || 0) - (a._relevanceScore || 0));
+    }
 
     const totalCount = matchedItems.length;
 
     if (totalCount === 0) {
-      assistantMessage = `I searched your personal vault for "${query}", but couldn't find any matching items. Try being more specific (e.g., folder name, filename, or keywords from text/OCR).`;
+      assistantMessage = `I searched your personal vault for "${query}", but couldn't find any matching items. Try asking by keyword, folder name, or text from screenshots.`;
     } else {
       let folderContext = targetFolder ? ` inside your "${targetFolder.name}" folder` : '';
       let typeContext = screenshotIntent
         ? ' matching screenshot(s)'
         : (categoryDetected ? ` ${categoryDetected} item(s)` : ' item(s)');
-      
-      assistantMessage = `I found ${totalCount}${typeContext}${folderContext} for you!`;
+
+      // Direct Question Answer Extraction (e.g. Wi-Fi password, codes, specific values)
+      const isQuestion = /\b(what|where|find|password|wifi|code|pin|login|key|secret|token|account|ifsc)\b/i.test(cleanQuery);
+      let directSnippet = '';
+
+      if (isQuestion && matchedItems.length > 0) {
+        for (const item of matchedItems.slice(0, 3)) {
+          const combinedText = `${item.content || ''}\n${item.ocrText || ''}`.trim();
+          if (combinedText) {
+            const lines = combinedText.split('\n').map(l => l.trim()).filter(Boolean);
+            const foundLine = lines.find(line => {
+              const lower = line.toLowerCase();
+              return keywordTerms.some(term => lower.includes(term)) ||
+                     (cleanQuery.includes('password') && lower.includes('pass')) ||
+                     (cleanQuery.includes('wifi') && (lower.includes('wifi') || lower.includes('network')));
+            });
+            if (foundLine) {
+              directSnippet = `💡 Extracted from "${item.title}":\n"${foundLine}"`;
+              break;
+            }
+          }
+        }
+      }
+
+      if (directSnippet) {
+        assistantMessage = `${directSnippet}\n\nFound ${totalCount}${typeContext}${folderContext}:`;
+      } else {
+        assistantMessage = `I found ${totalCount}${typeContext}${folderContext} in your vault:`;
+      }
     }
 
     res.json({
