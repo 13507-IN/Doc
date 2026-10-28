@@ -25,8 +25,18 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
     setLoading(true);
 
     try {
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('holder_token') : null);
+      if (!activeToken) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: 'You are not logged in. Please sign in to search your personal vault.'
+        }]);
+        setLoading(false);
+        return;
+      }
+
       const res = await axios.post(`${API_BASE}/assistant/query`, { query: textToSend }, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${activeToken}` }
       });
 
       if (res.data.success) {
@@ -39,10 +49,21 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
         setMessages(prev => [...prev, assistantMsg]);
       }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: 'Sorry, I ran into an issue searching your vault. Please ensure you are logged in.'
-      }]);
+      console.error('Assistant query error:', err);
+      const status = err.response?.status;
+      const errorMsg = err.response?.data?.message;
+
+      if (status === 401) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: 'Your session has expired or authentication failed. Please sign in again.'
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: errorMsg || 'Sorry, I ran into an issue searching your vault. Please try again.'
+        }]);
+      }
     } finally {
       setLoading(false);
     }

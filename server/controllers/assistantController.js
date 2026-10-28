@@ -1,6 +1,10 @@
 const Item = require('../models/Item');
 const Folder = require('../models/Folder');
 
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Process assistant query scoped to current user
 exports.queryAssistant = async (req, res) => {
   try {
@@ -52,7 +56,6 @@ exports.queryAssistant = async (req, res) => {
     const keywordTerms = cleanQuery
       .split(/\W+/)
       .filter((term) => term.length > 2 && !ignoredTerms.has(term));
-    const keywords = keywordTerms.join(' ');
 
     const orConditions = [];
     if (screenshotIntent) {
@@ -62,13 +65,14 @@ exports.queryAssistant = async (req, res) => {
         { url: { $regex: 'screenshot', $options: 'i' } }
       );
     }
-    if (keywords.length > 2) {
+    if (keywordTerms.length > 0) {
+      const escapedKeywords = keywordTerms.map(escapeRegex).join('|');
       orConditions.push(
-        { $text: { $search: keywords } },
-        { title: { $regex: keywords.replace(/\s+/g, '|'), $options: 'i' } },
-        { content: { $regex: keywords.replace(/\s+/g, '|'), $options: 'i' } },
-        { ocrText: { $regex: keywords.replace(/\s+/g, '|'), $options: 'i' } },
-        { tags: { $elemMatch: { $regex: keywords.replace(/\s+/g, '|'), $options: 'i' } } }
+        { title: { $regex: escapedKeywords, $options: 'i' } },
+        { content: { $regex: escapedKeywords, $options: 'i' } },
+        { ocrText: { $regex: escapedKeywords, $options: 'i' } },
+        { url: { $regex: escapedKeywords, $options: 'i' } },
+        { tags: { $elemMatch: { $regex: escapedKeywords, $options: 'i' } } }
       );
     }
 
@@ -110,6 +114,7 @@ exports.queryAssistant = async (req, res) => {
     });
 
   } catch (error) {
+    console.error('Error in queryAssistant:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

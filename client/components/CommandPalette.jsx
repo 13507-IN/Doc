@@ -13,11 +13,12 @@ export default function CommandPalette({ isOpen, onClose, token, onEditItem }) {
   useEffect(() => {
     if (!isOpen) return;
     const timer = window.setTimeout(async () => {
-      if (!query.trim() || !token) return setItems([]);
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('holder_token') : null);
+      if (!query.trim() || !activeToken) return setItems([]);
       try {
         const response = await axios.get(`${API_BASE}/items`, {
           params: { search: query, limit: 8 },
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${activeToken}` }
         });
         setItems(response.data.items || []);
       } catch {
