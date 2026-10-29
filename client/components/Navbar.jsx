@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, Plus, Sparkles, RefreshCw, Menu } from 'lucide-react';
+import { Search, Plus, Sparkles, RefreshCw, Menu, Download } from 'lucide-react';
 
 export default function Navbar({ 
   searchQuery, 
@@ -10,7 +10,9 @@ export default function Navbar({
   activeFolderName,
   totalItems = 0,
   onRefresh,
-  onToggleMobileMenu
+  onToggleMobileMenu,
+  onOpenInstall,
+  isAppInstalled = false
 }) {
   return (
     <header className="navbar-header">
@@ -90,6 +92,31 @@ export default function Navbar({
 
       {/* Action Buttons */}
       <div className="navbar-actions">
+        {!isAppInstalled && onOpenInstall && (
+          <button 
+            onClick={onOpenInstall}
+            className="navbar-btn-install"
+            title="Install Holder App"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 11px',
+              borderRadius: '8px',
+              background: 'rgba(37, 99, 235, 0.15)',
+              border: '1px solid rgba(37, 99, 235, 0.35)',
+              color: '#93c5fd',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Download size={14} color="#60a5fa" />
+            <span className="navbar-btn-label">Install App</span>
+          </button>
+        )}
+
         <button 
           onClick={onOpenAddItem}
           className="navbar-btn-primary"

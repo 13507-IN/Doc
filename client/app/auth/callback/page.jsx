@@ -16,6 +16,7 @@ function CallbackContent() {
 
         localStorage.setItem('holder_token', token);
         localStorage.setItem('holder_user', JSON.stringify(userObj));
+        sessionStorage.setItem('holder_just_logged_in', '1');
 
         // Broadcast postMessage to sync with Chrome Extension instantly
         if (typeof window !== 'undefined') {

@@ -13,6 +13,7 @@ import ImageModal from '../components/ImageModal';
 import PdfModal from '../components/PdfModal';
 import CommandPalette from '../components/CommandPalette';
 import MobileBottomNav from '../components/MobileBottomNav';
+import InstallAppModal from '../components/InstallAppModal';
 import { Plus, SearchX } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -43,6 +44,9 @@ export default function Home() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
 
   const [activeYouTubeItem, setActiveYouTubeItem] = useState(null);
   const [activeImageItem, setActiveImageItem] = useState(null);
@@ -50,6 +54,43 @@ export default function Home() {
 
   const [loading, setLoading] = useState(true);
   const requestControllerRef = useRef(null);
+
+  // Handle PWA installation and Service Worker registration
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Check if running in standalone mode (already installed PWA)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      setIsAppInstalled(true);
+    }
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('Service worker registration failed:', err);
+      });
+    }
+
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+      setIsInstallModalOpen(false);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
 
   // Initialize Auth on mount
   useEffect(() => {
@@ -63,6 +104,18 @@ export default function Home() {
           const parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
           window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: savedToken, user: parsedUser }, '*');
+
+          // If coming from Google OAuth callback redirect, show install popup
+          const justLoggedIn = sessionStorage.getItem('holder_just_logged_in');
+          if (justLoggedIn) {
+            sessionStorage.removeItem('holder_just_logged_in');
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+            if (!isStandalone) {
+              setTimeout(() => {
+                setIsInstallModalOpen(true);
+              }, 600);
+            }
+          }
         } catch (e) {
           localStorage.removeItem('holder_token');
           localStorage.removeItem('holder_user');
@@ -84,6 +137,16 @@ export default function Home() {
       window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: newToken, user: newUser }, '*');
     }
     setIsAuthOpen(false);
+
+    // Pop up install app modal right after sign up or log in
+    if (typeof window !== 'undefined') {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (!isStandalone) {
+        setTimeout(() => {
+          setIsInstallModalOpen(true);
+        }, 500);
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -282,6 +345,17 @@ export default function Home() {
         onLoginSuccess={handleLoginSuccess}
       />
 
+      {/* PWA Install App Modal */}
+      <InstallAppModal 
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        deferredPrompt={deferredPrompt}
+        onInstalled={() => {
+          setIsAppInstalled(true);
+          setDeferredPrompt(null);
+        }}
+      />
+
       {/* Sidebar */}
       <Sidebar 
         folders={folders}
@@ -298,6 +372,8 @@ export default function Home() {
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onOpenInstall={() => setIsInstallModalOpen(true)}
+        isAppInstalled={isAppInstalled}
       />
 
       {/* Main Content Area */}
@@ -312,6 +388,8 @@ export default function Home() {
           totalItems={items.length}
           onRefresh={() => { fetchItems(); fetchFolders(); }}
           onToggleMobileMenu={() => setIsMobileSidebarOpen(prev => !prev)}
+          onOpenInstall={() => setIsInstallModalOpen(true)}
+          isAppInstalled={isAppInstalled}
         />
 
         {/* Content Container */}

@@ -2,7 +2,7 @@
 import React from 'react';
 import { 
   Folder, Plus, Sparkles, Layers, 
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut, X
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut, X, Smartphone
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -19,7 +19,9 @@ export default function Sidebar({
   user,
   onLogout,
   isMobileOpen = false,
-  onCloseMobile
+  onCloseMobile,
+  onOpenInstall,
+  isAppInstalled = false
 }) {
   const visibleFolders = activeFolder === 'all'
     ? folders
@@ -206,6 +208,42 @@ export default function Sidebar({
           <TypeFilterBtn active={activeType === 'note'} onClick={() => handleTypeClick('note')} icon={<FileText size={13} color="#d97706" />} label="Notes" />
         </div>
       </div>
+
+      {/* Install App Button */}
+      {!isAppInstalled && onOpenInstall && (
+        <button
+          onClick={() => {
+            onOpenInstall();
+            if (onCloseMobile) onCloseMobile();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            width: '100%',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'rgba(37, 99, 235, 0.12)',
+            border: '1px solid rgba(37, 99, 235, 0.3)',
+            color: '#93c5fd',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: '10px',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(37, 99, 235, 0.22)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(37, 99, 235, 0.12)';
+          }}
+        >
+          <Smartphone size={15} color="#60a5fa" />
+          <span>Install Holder App</span>
+        </button>
+      )}
 
       {/* Logged In User Profile Footer */}
       {user && (
