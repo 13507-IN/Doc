@@ -1,5 +1,6 @@
 const Item = require('../models/Item');
 const Folder = require('../models/Folder');
+const { extractUrlsFromText } = require('../services/ocrService');
 
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -127,11 +128,31 @@ exports.queryAssistant = async (req, res) => {
         ? ' matching screenshot(s)'
         : (categoryDetected ? ` ${categoryDetected} item(s)` : ' item(s)');
 
-      // Direct Question Answer Extraction (e.g. Wi-Fi password, codes, specific values)
-      const isQuestion = /\b(what|where|find|password|wifi|code|pin|login|key|secret|token|account|ifsc)\b/i.test(cleanQuery);
+      // Direct Question Answer Extraction (e.g. Wi-Fi password, codes, links, specific values)
+      const isQuestion = /\b(what|where|find|password|wifi|code|pin|login|key|secret|token|account|ifsc|link|website|url|site)\b/i.test(cleanQuery);
+      const isLinkQuery = /\b(link|website|url|site|web|address)\b/i.test(cleanQuery);
       let directSnippet = '';
 
-      if (isQuestion && matchedItems.length > 0) {
+      if (isLinkQuery && matchedItems.length > 0) {
+        for (const item of matchedItems) {
+          let foundUrl = item.metadata?.detectedUrls?.[0];
+          if (!foundUrl && item.ocrText) {
+            const extracted = extractUrlsFromText(item.ocrText);
+            if (extracted.length > 0) foundUrl = extracted[0];
+          }
+          if (!foundUrl && item.url && !item.url.includes('cloudinary') && !item.url.includes('/uploads/')) {
+            foundUrl = item.url;
+          }
+
+          if (foundUrl) {
+            directSnippet = `🌐 Link from "${item.title}":\n[${foundUrl}](${foundUrl})`;
+            item.url = foundUrl;
+            break;
+          }
+        }
+      }
+
+      if (!directSnippet && isQuestion && matchedItems.length > 0) {
         for (const item of matchedItems.slice(0, 3)) {
           const combinedText = `${item.content || ''}\n${item.ocrText || ''}`.trim();
           if (combinedText) {
@@ -155,6 +176,20 @@ exports.queryAssistant = async (req, res) => {
       } else {
         assistantMessage = `I found ${totalCount}${typeContext}${folderContext} in your vault:`;
       }
+
+      // Ensure every item has its website URL populated from detectedUrls if available
+      matchedItems.forEach(item => {
+        if (item.metadata?.detectedUrls?.length > 0) {
+          item.url = item.metadata.detectedUrls[0];
+        } else if (item.ocrText && (!item.url || item.url.includes('cloudinary') || item.url.includes('/uploads/'))) {
+          const detected = extractUrlsFromText(item.ocrText);
+          if (detected.length > 0) {
+            item.url = detected[0];
+            if (!item.metadata) item.metadata = {};
+            item.metadata.detectedUrls = detected;
+          }
+        }
+      });
     }
 
     res.json({

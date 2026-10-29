@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { 
   Play, ExternalLink, Copy, Check, Star, Pin, Pencil, Trash2,
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock, Globe
 } from 'lucide-react';
+import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 
 export default function ItemCard({ 
   item, 
@@ -16,6 +17,8 @@ export default function ItemCard({
   onDeleteItem 
 }) {
   const [copied, setCopied] = useState(false);
+  const websiteUrl = getWebsiteUrlForItem(item);
+  const directLink = websiteUrl || (item.url ? ensureAbsoluteUrl(item.url) : null);
 
   const handleCopy = (text, e) => {
     e.stopPropagation();
@@ -362,6 +365,37 @@ export default function ItemCard({
           </p>
         )}
 
+        {/* Website in Screenshot Badge */}
+        {item.type === 'image' && websiteUrl && (
+          <a
+            href={websiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              color: '#93c5fd',
+              background: 'rgba(37, 99, 235, 0.14)',
+              border: '1px solid rgba(37, 99, 235, 0.35)',
+              padding: '5px 9px',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              maxWidth: '100%',
+              width: 'fit-content'
+            }}
+            title={`Open detected website: ${websiteUrl}`}
+          >
+            <Globe size={13} color="#60a5fa" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+              {websiteUrl.replace(/^https?:\/\/(www\.)?/i, '')}
+            </span>
+            <ExternalLink size={11} style={{ flexShrink: 0 }} />
+          </a>
+        )}
+
         {item.expiresAt && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: new Date(item.expiresAt) < new Date() ? '#f87171' : '#fbbf24', fontSize: '12px' }}>
             <CalendarClock size={14} />
@@ -402,9 +436,9 @@ export default function ItemCard({
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {(item.url || item.content) && (
+            {(directLink || item.content) && (
               <button 
-                onClick={(e) => handleCopy(item.url || item.content, e)}
+                onClick={(e) => handleCopy(directLink || item.content, e)}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -416,26 +450,35 @@ export default function ItemCard({
                   gap: '4px',
                   fontSize: '11px'
                 }}
-                title="Copy URL or Content"
+                title={directLink ? "Copy Website Link" : "Copy Content"}
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             )}
 
-            {item.url && (
+            {directLink && (
               <a 
-                href={item.url} 
+                href={directLink} 
                 target="_blank" 
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  color: 'var(--accent-primary)',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center'
+                  color: websiteUrl ? '#93c5fd' : 'var(--accent-primary)',
+                  background: websiteUrl ? 'rgba(37, 99, 235, 0.18)' : 'transparent',
+                  border: websiteUrl ? '1px solid rgba(37, 99, 235, 0.3)' : 'none',
+                  borderRadius: '5px',
+                  padding: websiteUrl ? '3px 7px' : '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  textDecoration: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600
                 }}
-                title="Open Link"
+                title={`Visit Website: ${directLink}`}
               >
-                <ExternalLink size={14} />
+                {websiteUrl && <span>Visit</span>}
+                <ExternalLink size={13} />
               </a>
             )}
 

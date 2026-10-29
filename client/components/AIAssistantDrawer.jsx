@@ -1,7 +1,9 @@
 'use client';
 import React, { useState } from 'react';
-import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon, Globe } from 'lucide-react';
 import axios from 'axios';
+import ClickableText from './ClickableText';
+import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -160,58 +162,95 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
                 whiteSpace: 'pre-wrap',
                 border: msg.role === 'user' ? 'none' : '1px solid var(--border-color)'
               }}>
-                {msg.text}
+                <ClickableText text={msg.text} />
               </div>
 
               {msg.items && msg.items.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                  {msg.items.map(item => (
-                    <div key={item._id} style={{
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      background: 'var(--bg-primary)',
-                      border: '1px solid var(--border-color)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '9px', overflow: 'hidden', minWidth: 0 }}>
-                        {item.type === 'image' && (item.previewUrl || item.url) ? (
-                          <a
-                            href={item.previewUrl || item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={`Open ${item.title}`}
-                            style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}
-                          >
-                            {/* Search results should make matching screenshots immediately visible. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={item.previewUrl || item.url}
-                              alt={item.title}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                            />
-                          </a>
-                        ) : item.type === 'image' ? (
-                          <ImageIcon size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-                        ) : null}
-                        <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                        <p style={{ fontSize: '12px', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                          {item.title}
-                        </p>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          {item.type.toUpperCase()} {item.folderId ? `• ${item.folderId.name}` : ''}
-                        </span>
+                  {msg.items.map(item => {
+                    const websiteUrl = getWebsiteUrlForItem(item);
+                    return (
+                      <div key={item._id} style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', overflow: 'hidden', minWidth: 0 }}>
+                          {item.type === 'image' && (item.previewUrl || item.url) ? (
+                            <a
+                              href={item.previewUrl || item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`View full image: ${item.title}`}
+                              style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}
+                            >
+                              {/* Search results should make matching screenshots immediately visible. */}
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={item.previewUrl || item.url}
+                                alt={item.title}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              />
+                            </a>
+                          ) : item.type === 'image' ? (
+                            <ImageIcon size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                          ) : null}
+                          <div style={{ overflow: 'hidden', minWidth: 0 }}>
+                            <p style={{ fontSize: '12px', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              {item.title}
+                            </p>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {item.type.toUpperCase()} {item.folderId ? `• ${item.folderId.name}` : ''}
+                            </span>
+                          </div>
                         </div>
+
+                        {/* Direct Redirection Link */}
+                        {websiteUrl ? (
+                          <a 
+                            href={websiteUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: 'rgba(37, 99, 235, 0.2)',
+                              border: '1px solid rgba(37, 99, 235, 0.4)',
+                              color: '#93c5fd',
+                              padding: '5px 9px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              cursor: 'pointer'
+                            }}
+                            title={`Open Website: ${websiteUrl}`}
+                          >
+                            <Globe size={12} />
+                            <span>Visit Site</span>
+                          </a>
+                        ) : item.url ? (
+                          <a 
+                            href={ensureAbsoluteUrl(item.url)} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ color: 'var(--accent-primary)', padding: '2px', flexShrink: 0 }}
+                            title={`Open: ${item.url}`}
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        ) : null}
                       </div>
-                      {item.url && (
-                        <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', padding: '2px' }}>
-                          <ExternalLink size={14} />
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
