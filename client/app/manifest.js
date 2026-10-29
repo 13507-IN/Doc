@@ -2,7 +2,7 @@ export default function manifest() {
   return {
     name: 'Holder — Personal Assistant Vault',
     short_name: 'Holder',
-    description: 'Save, organize, and retrieve YouTube videos, links, notes, and screenshots with 1-tap sharing.',
+    description: 'Save, organize, and retrieve YouTube videos, links, notes, images, and screenshots with 1-tap sharing.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0b0f19',
@@ -35,11 +35,26 @@ export default function manifest() {
     ],
     share_target: {
       action: '/share',
-      method: 'GET',
+      method: 'POST',
+      enctype: 'multipart/form-data',
       params: {
         title: 'title',
         text: 'text',
-        url: 'url'
+        url: 'url',
+        files: [
+          {
+            name: 'media',
+            accept: [
+              'image/*',
+              'image/png',
+              'image/jpeg',
+              'image/jpg',
+              'image/webp',
+              'image/gif',
+              'application/pdf'
+            ]
+          }
+        ]
       }
     }
   };
