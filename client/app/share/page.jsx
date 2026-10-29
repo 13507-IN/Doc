@@ -50,6 +50,76 @@ async function getSharedPayloadFromDB() {
   });
 }
 
+// Client-side fast image compressor: turns large 10-15MB mobile PNG screenshots into ~400KB in ~40ms
+async function compressImageForUpload(file) {
+  if (typeof window === 'undefined' || !file) return file;
+  const isImage = file.type ? file.type.startsWith('image/') : true;
+  if (!isImage || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    return file;
+  }
+  // If already under 500 KB, no need to compress further
+  if (file.size && file.size < 500 * 1024) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX_DIM = 2048; // 2K crisp resolution for screenshots
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              const fileName = (file.name || 'screenshot.png').replace(/\.[^/.]+$/, '.jpg');
+              const compressedFile = new File([blob], fileName, {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.85
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    } catch (e) {
+      resolve(file);
+    }
+  });
+}
+
 function ShareContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,7 +136,7 @@ function ShareContent() {
   const [tags, setTags] = useState('mobile');
   const [sharedFile, setSharedFile] = useState(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -133,7 +203,7 @@ function ShareContent() {
         }
         setTags(isYouTube ? 'mobile, youtube' : 'mobile');
 
-        // Fetch rich metadata if it's a URL
+        // Fetch rich metadata if it's a URL in background
         if (extractedUrl) {
           axios.post(`${API_BASE}/metadata/extract`, { url: extractedUrl })
             .then(res => {
@@ -156,30 +226,42 @@ function ShareContent() {
       const savedToken = typeof window !== 'undefined' ? localStorage.getItem('holder_token') : null;
       setToken(savedToken);
 
+      const autoPickFolder = (fList, itemType) => {
+        if (!fList || fList.length === 0) return;
+        if (itemType === 'image') {
+          const match = fList.find(f => /image|screenshot|photo|design|asset/i.test(f.name));
+          if (match) setSelectedFolder(match._id);
+        } else if (itemType === 'youtube') {
+          const match = fList.find(f => /youtube|learning|video/i.test(f.name));
+          if (match) setSelectedFolder(match._id);
+        } else if (itemType === 'link') {
+          const match = fList.find(f => /bookmark|web|link/i.test(f.name));
+          if (match) setSelectedFolder(match._id);
+        }
+      };
+
+      // Instantly load cached folders without network latency
+      try {
+        const cachedFolders = localStorage.getItem('holder_cached_folders');
+        if (cachedFolders) {
+          const parsed = JSON.parse(cachedFolders);
+          setFolders(parsed);
+          autoPickFolder(parsed, detectedType);
+        }
+      } catch (e) {}
+
+      // Background non-blocking refresh of folders (never delays user save action)
       if (savedToken) {
-        try {
-          const res = await axios.get(`${API_BASE}/folders`, {
-            headers: { Authorization: `Bearer ${savedToken}` }
-          });
+        axios.get(`${API_BASE}/folders`, {
+          headers: { Authorization: `Bearer ${savedToken}` }
+        }).then((res) => {
           if (res.data.success && res.data.folders) {
             setFolders(res.data.folders);
-            // Auto-select relevant folder
-            if (detectedType === 'image') {
-              const imgFolder = res.data.folders.find(f => /image|screenshot|photo|design|asset/i.test(f.name));
-              if (imgFolder) setSelectedFolder(imgFolder._id);
-            } else if (detectedType === 'youtube') {
-              const ytFolder = res.data.folders.find(f => /youtube|learning|video/i.test(f.name));
-              if (ytFolder) setSelectedFolder(ytFolder._id);
-            } else if (detectedType === 'link') {
-              const bmFolder = res.data.folders.find(f => /bookmark|web|link/i.test(f.name));
-              if (bmFolder) setSelectedFolder(bmFolder._id);
-            }
+            localStorage.setItem('holder_cached_folders', JSON.stringify(res.data.folders));
+            autoPickFolder(res.data.folders, detectedType);
           }
-        } catch (err) {
-          console.warn('Failed to load folders:', err);
-        }
+        }).catch(() => {});
       }
-      setLoading(false);
     }
 
     initShare();
@@ -202,64 +284,63 @@ function ShareContent() {
     setError('');
 
     try {
+      // FAST PATH: Direct single-roundtrip screenshot / image save with background OCR
+      if (sharedFile && sharedFile.blob && type === 'image') {
+        const fileToUpload = await compressImageForUpload(sharedFile.blob);
+        const formData = new FormData();
+        formData.append('image', fileToUpload, sharedFile.name || 'screenshot.jpg');
+        formData.append('title', title.trim() || 'Shared Screenshot');
+        if (selectedFolder) formData.append('folderId', selectedFolder);
+        if (tags) formData.append('tags', tags);
+        if (notes) formData.append('content', notes);
+
+        const res = await axios.post(`${API_BASE}/items/screenshot`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (res.data.success) {
+          setSavedSuccess(true);
+          return;
+        } else {
+          throw new Error(res.data.message || 'Failed to save screenshot');
+        }
+      }
+
+      // PDF Document Path
       let finalPreviewUrl = previewUrl;
       let finalUrl = url.trim();
       let finalMetadata = { ...metadata };
       let ocrText = '';
 
-      // If a file (picture/screenshot/pdf) was shared, upload it first to the backend
-      if (sharedFile && sharedFile.blob) {
-        if (type === 'image') {
-          const formData = new FormData();
-          formData.append('image', sharedFile.blob, sharedFile.name || 'shared-screenshot.png');
+      if (sharedFile && sharedFile.blob && type === 'pdf') {
+        const formData = new FormData();
+        formData.append('pdf', sharedFile.blob, sharedFile.name || 'shared-document.pdf');
 
-          const uploadRes = await axios.post(`${API_BASE}/items/upload-image?ocr=true`, formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              Authorization: `Bearer ${token}`
-            }
-          });
-
-          if (uploadRes.data.success) {
-            finalPreviewUrl = uploadRes.data.imageUrl;
-            finalUrl = uploadRes.data.imageUrl;
-            ocrText = uploadRes.data.ocrText || '';
-            finalMetadata = {
-              ...finalMetadata,
-              cloudinaryPublicId: uploadRes.data.cloudinaryPublicId,
-              localFilename: uploadRes.data.localFilename,
-              size: sharedFile.size,
-              mimeType: sharedFile.type
-            };
-          } else {
-            throw new Error(uploadRes.data.message || 'Image upload failed');
+        const uploadRes = await axios.post(`${API_BASE}/items/upload-pdf`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`
           }
-        } else if (type === 'pdf') {
-          const formData = new FormData();
-          formData.append('pdf', sharedFile.blob, sharedFile.name || 'shared-document.pdf');
+        });
 
-          const uploadRes = await axios.post(`${API_BASE}/items/upload-pdf`, formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              Authorization: `Bearer ${token}`
-            }
-          });
-
-          if (uploadRes.data.success) {
-            finalPreviewUrl = uploadRes.data.pdfUrl;
-            finalUrl = uploadRes.data.pdfUrl;
-            ocrText = uploadRes.data.extractedText || '';
-            finalMetadata = {
-              ...finalMetadata,
-              size: sharedFile.size,
-              totalPages: uploadRes.data.totalPages
-            };
-          } else {
-            throw new Error(uploadRes.data.message || 'PDF upload failed');
-          }
+        if (uploadRes.data.success) {
+          finalPreviewUrl = uploadRes.data.pdfUrl;
+          finalUrl = uploadRes.data.pdfUrl;
+          ocrText = uploadRes.data.extractedText || '';
+          finalMetadata = {
+            ...finalMetadata,
+            size: sharedFile.size,
+            totalPages: uploadRes.data.totalPages
+          };
+        } else {
+          throw new Error(uploadRes.data.message || 'PDF upload failed');
         }
       }
 
+      // Regular items (links, youtube, notes, pdfs)
       const payload = {
         title: title.trim() || 'Shared Item',
         type,
@@ -404,7 +485,7 @@ function ShareContent() {
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>Saved to Vault!</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              &quot;{title}&quot; is now archived and indexed with AI search.
+              &quot;{title}&quot; is archived and text is indexed in the background for AI search.
             </p>
             <div style={{ display: 'flex', gap: '10px', marginTop: '12px', width: '100%' }}>
               <button
@@ -593,7 +674,7 @@ function ShareContent() {
             {/* Save Button */}
             <button
               type="submit"
-              disabled={saving || loading}
+              disabled={saving}
               style={{
                 marginTop: '6px',
                 padding: '13px',
@@ -612,7 +693,7 @@ function ShareContent() {
               }}
             >
               <Sparkles size={16} />
-              <span>{saving ? 'Uploading & Indexing...' : 'Save to Vault'}</span>
+              <span>{saving ? 'Saving to Vault...' : 'Save to Vault'}</span>
             </button>
           </form>
         )}

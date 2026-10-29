@@ -381,11 +381,17 @@ exports.createScreenshot = async (req, res) => {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean);
+
+    const rawFolderId = req.body.folderId;
+    const cleanFolderId = (rawFolderId && rawFolderId !== 'null' && rawFolderId !== 'undefined' && String(rawFolderId).trim() !== '')
+      ? rawFolderId
+      : null;
+
     const item = await Item.create({
       userId: req.user.id,
       title: String(req.body.title || `Screenshot — ${new Date().toLocaleString()}`).slice(0, 200),
       type: 'image',
-      folderId: req.body.folderId || null,
+      folderId: cleanFolderId,
       url: req.body.url || '',
       content: req.body.content || '',
       previewUrl: stored.imageUrl,
@@ -393,7 +399,9 @@ exports.createScreenshot = async (req, res) => {
       metadata: {
         ...(req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {}),
         cloudinaryPublicId: stored.cloudinaryPublicId,
-        localFilename: stored.localFilename
+        localFilename: stored.localFilename,
+        size: req.file.size,
+        mimeType: req.file.mimetype
       },
       ocrStatus: 'pending'
     });
