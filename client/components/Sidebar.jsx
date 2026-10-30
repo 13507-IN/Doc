@@ -21,7 +21,8 @@ export default function Sidebar({
   isMobileOpen = false,
   onCloseMobile,
   onOpenInstall,
-  isAppInstalled = false
+  isAppInstalled = false,
+  onOpenGuide
 }) {
   const visibleFolders = activeFolder === 'all'
     ? folders
@@ -208,6 +209,42 @@ export default function Sidebar({
           <TypeFilterBtn active={activeType === 'note'} onClick={() => handleTypeClick('note')} icon={<FileText size={13} color="#d97706" />} label="Notes" />
         </div>
       </div>
+
+      {/* Interactive Guide Button */}
+      {onOpenGuide && (
+        <button
+          onClick={() => {
+            onOpenGuide();
+            if (onCloseMobile) onCloseMobile();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            width: '100%',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            color: '#fcd34d',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: '8px',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(245, 158, 11, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(245, 158, 11, 0.1)';
+          }}
+        >
+          <Sparkles size={14} color="#f59e0b" />
+          <span>Interactive Guide</span>
+        </button>
+      )}
 
       {/* Install App Button */}
       {!isAppInstalled && onOpenInstall && (

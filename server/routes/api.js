@@ -72,6 +72,7 @@ router.delete('/folders/:id', authMiddleware, folderController.deleteFolder);
 router.get('/items', authMiddleware, itemController.getItems);
 router.get('/items/:id', authMiddleware, itemController.getItemById);
 router.post('/items', authMiddleware, itemController.createItem);
+router.post('/items/seed-demo', authMiddleware, itemController.seedDemoItems);
 router.put('/items/:id', authMiddleware, itemController.updateItem);
 router.delete('/items/:id', authMiddleware, itemController.deleteItem);
 router.patch('/items/:id/favorite', authMiddleware, itemController.toggleFavorite);

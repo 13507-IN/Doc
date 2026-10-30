@@ -7,7 +7,14 @@ import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, token }) {
+export default function AIAssistantDrawer({ 
+  isOpen, 
+  onClose, 
+  onSelectFolder, 
+  token,
+  initialPrompt = '',
+  onQuerySent
+}) {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([
     {
@@ -16,6 +23,14 @@ export default function AIAssistantDrawer({ isOpen, onClose, onSelectFolder, tok
     }
   ]);
   const [loading, setLoading] = useState(false);
+
+  // Auto-run initial prompt when triggered by Interactive Guide
+  React.useEffect(() => {
+    if (isOpen && initialPrompt) {
+      handleSend(initialPrompt);
+      if (onQuerySent) onQuerySent();
+    }
+  }, [isOpen, initialPrompt]);
 
   const handleSend = async (promptText) => {
     const textToSend = promptText || query;

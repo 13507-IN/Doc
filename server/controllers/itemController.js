@@ -482,3 +482,85 @@ exports.uploadPdf = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Seed realistic demo starter items for new users and onboarding tour
+exports.seedDemoItems = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const Folder = require('../models/Folder');
+
+    const folders = await Folder.find({ userId });
+    const travelOrPrivateFolder = folders.find(f => /private|important|personal|brand/i.test(f.name)) || folders[0];
+    const learningFolder = folders.find(f => /youtube|learning|video/i.test(f.name)) || folders[0];
+    const webFolder = folders.find(f => /bookmark|web|link/i.test(f.name)) || folders[0];
+
+    const demoItems = [
+      {
+        userId,
+        title: 'Delta Flight Confirmation & In-Flight Wi-Fi (Screenshot)',
+        type: 'image',
+        folderId: travelOrPrivateFolder ? travelOrPrivateFolder._id : null,
+        url: 'https://delta.com/manage-trip',
+        previewUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=1000&auto=format&fit=crop&q=80',
+        content: 'Saved e-ticket for SFO -> JFK flight. Contains seat number, gate details, and in-flight Wi-Fi credentials.',
+        ocrText: 'DELTA AIR LINES — E-TICKET CONFIRMATION\nBooking Ref: HLD-8921A\nPassenger: Alex Mercer\nFlight: DL 1492 | Seat: 14C (Window)\nDepart: San Francisco (SFO) 08:30 AM -> Arrive: New York (JFK) 04:55 PM\nWi-Fi Network: Delta-InFlight (Pass: FlyDelta2026)\nCustomer portal: https://delta.com/manage-trip\nBaggage check-in support: https://help.delta.com',
+        ocrStatus: 'done',
+        tags: ['flight', 'screenshot', 'ticket', 'wifi', 'travel'],
+        metadata: {
+          detectedUrls: ['https://delta.com/manage-trip', 'https://help.delta.com'],
+          size: 420100
+        },
+        isFavorite: true,
+        pinned: true
+      },
+      {
+        userId,
+        title: 'Steve Jobs 2005 Stanford Commencement Speech',
+        type: 'youtube',
+        folderId: learningFolder ? learningFolder._id : null,
+        url: 'https://www.youtube.com/watch?v=UF8uR6Z6KLc',
+        previewUrl: 'https://img.youtube.com/vi/UF8uR6Z6KLc/hqdefault.jpg',
+        content: 'Iconic talk on connecting the dots, love and loss, and mortality. "Your time is limited, so don\'t waste it living someone else\'s life. Stay Hungry, Stay Foolish."',
+        tags: ['inspiration', 'youtube', 'learning', 'career'],
+        metadata: {
+          youtubeId: 'UF8uR6Z6KLc',
+          authorName: 'Stanford University'
+        },
+        isFavorite: true
+      },
+      {
+        userId,
+        title: 'Tailwind CSS — Rapidly build modern websites without leaving HTML',
+        type: 'link',
+        folderId: webFolder ? webFolder._id : null,
+        url: 'https://tailwindcss.com',
+        previewUrl: 'https://tailwindcss.com/api/og',
+        content: 'A utility-first CSS framework packed with classes that can be composed to build any design directly in your markup.',
+        tags: ['design', 'css', 'frontend', 'developer'],
+        metadata: {
+          detectedUrls: ['https://tailwindcss.com']
+        }
+      }
+    ];
+
+    const existing = await Item.find({
+      userId,
+      title: { $in: demoItems.map(d => d.title) }
+    });
+
+    const itemsToInsert = demoItems.filter(d => !existing.some(e => e.title === d.title));
+
+    let createdItems = [];
+    if (itemsToInsert.length > 0) {
+      createdItems = await Item.insertMany(itemsToInsert);
+    }
+
+    res.json({
+      success: true,
+      message: `${itemsToInsert.length} interactive demo items added to your vault!`,
+      count: createdItems.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

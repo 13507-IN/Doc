@@ -14,7 +14,8 @@ import PdfModal from '../components/PdfModal';
 import CommandPalette from '../components/CommandPalette';
 import MobileBottomNav from '../components/MobileBottomNav';
 import InstallAppModal from '../components/InstallAppModal';
-import { Plus, SearchX } from 'lucide-react';
+import OnboardingGuide from '../components/OnboardingGuide';
+import { Plus, SearchX, Zap } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -47,6 +48,8 @@ export default function Home() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(true);
+  const [assistantInitialPrompt, setAssistantInitialPrompt] = useState('');
 
   const [activeYouTubeItem, setActiveYouTubeItem] = useState(null);
   const [activeImageItem, setActiveImageItem] = useState(null);
@@ -160,6 +163,46 @@ export default function Home() {
     setItems([]);
     setFolders([]);
     setIsAuthOpen(true);
+  };
+
+  // Check if onboarding tour was previously dismissed
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dismissed = localStorage.getItem('holder_onboarding_dismissed');
+      if (dismissed === 'true') {
+        setIsOnboardingOpen(false);
+      }
+    }
+  }, []);
+
+  const handleLoadDemoPack = async () => {
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('holder_token') : null);
+    if (!activeToken) return;
+    try {
+      const res = await axios.post(`${API_BASE}/items/seed-demo`, {}, {
+        headers: { Authorization: `Bearer ${activeToken}` }
+      });
+      if (res.data.success) {
+        fetchItems();
+        fetchFolders();
+      }
+    } catch (err) {
+      console.error('Failed to seed demo items:', err);
+    }
+  };
+
+  const handleCloseGuide = () => {
+    setIsOnboardingOpen(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('holder_onboarding_dismissed', 'true');
+    }
+  };
+
+  const handleReopenGuide = () => {
+    setIsOnboardingOpen(true);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('holder_onboarding_dismissed');
+    }
   };
 
   // Clipboard auto-detection: check for copied URL when window is focused
@@ -374,6 +417,7 @@ export default function Home() {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onOpenInstall={() => setIsInstallModalOpen(true)}
         isAppInstalled={isAppInstalled}
+        onOpenGuide={handleReopenGuide}
       />
 
       {/* Main Content Area */}
@@ -395,6 +439,27 @@ export default function Home() {
         {/* Content Container */}
         <div className="main-content-padding" style={{ overflowY: 'auto' }}>
           
+          {/* Interactive Onboarding Guide */}
+          <OnboardingGuide 
+            isOpen={isOnboardingOpen}
+            onClose={handleCloseGuide}
+            onLoadDemoPack={handleLoadDemoPack}
+            onTryAI={(prompt) => {
+              setAssistantInitialPrompt(prompt);
+              setIsAssistantOpen(true);
+            }}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onOpenAddItem={() => {
+              setEditingItem(null);
+              setPrefillUrl('');
+              setIsAddItemOpen(true);
+            }}
+            onOpenInstall={() => setIsInstallModalOpen(true)}
+            itemsCount={items.length}
+            isAppInstalled={isAppInstalled}
+            user={user}
+          />
+
           {/* Active Folder Header Banner */}
           {activeFolderObj && (
             <div className="glass-panel animate-fade-in" style={{
@@ -470,28 +535,50 @@ export default function Home() {
                 No Items Found
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                {searchQuery ? `No results matching "${searchQuery}".` : 'Your vault is ready! Click below to save your first YouTube video, PDF, image, or link.'}
+                {searchQuery ? `No results matching "${searchQuery}".` : 'Your vault is ready! Click below to save your first YouTube video, PDF, image, or load the starter pack.'}
               </p>
-              <button 
-                onClick={() => setIsAddItemOpen(true)}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
-                }}
-              >
-                <Plus size={16} />
-                <span>Save New Item</span>
-              </button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button 
+                  onClick={() => setIsAddItemOpen(true)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
+                  }}
+                >
+                  <Plus size={16} />
+                  <span>Save New Item</span>
+                </button>
+
+                <button
+                  onClick={handleLoadDemoPack}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    background: 'rgba(37, 99, 235, 0.15)',
+                    border: '1px solid rgba(37, 99, 235, 0.35)',
+                    color: '#93c5fd',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Zap size={15} />
+                  <span>Load Starter Pack</span>
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -566,6 +653,8 @@ export default function Home() {
         onClose={() => setIsAssistantOpen(false)}
         onSelectFolder={(fId) => setActiveFolder(fId)}
         token={token}
+        initialPrompt={assistantInitialPrompt}
+        onQuerySent={() => setAssistantInitialPrompt('')}
       />
 
       <YouTubeModal 
