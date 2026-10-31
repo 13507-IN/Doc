@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, CheckCircle2, Circle, ArrowRight, Zap, 
-  Search, Plus, Smartphone, X, ChevronDown, ChevronUp, RotateCcw
+  Search, Plus, Smartphone, X, ChevronDown, ChevronUp, RotateCcw, Check
 } from 'lucide-react';
 
 export default function OnboardingGuide({
@@ -140,7 +140,7 @@ export default function OnboardingGuide({
           fontSize: '11px',
           fontWeight: 700
         }}>
-          {isAllComplete ? '✓' : `${completedCount}/${totalTasks}`}
+          {isAllComplete ? <Check size={14} strokeWidth={2.5} /> : `${completedCount}/${totalTasks}`}
         </div>
         <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
           {isAllComplete ? 'Guide Completed' : 'Interactive Guide'}

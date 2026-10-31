@@ -645,10 +645,10 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                 className="glass-input"
                 style={{ width: '100%', cursor: 'pointer' }}
               >
-                <option value="" style={{ background: '#121524', color: '#f8fafc' }}>📁 Uncategorized</option>
+                <option value="" style={{ background: '#121524', color: '#f8fafc' }}>Uncategorized</option>
                 {folders.map(f => (
                   <option key={f._id} value={f._id} style={{ background: '#121524', color: '#f8fafc' }}>
-                    {f.icon || '📁'} {f.name}
+                    {f.name}
                   </option>
                 ))}
               </select>

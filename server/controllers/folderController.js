@@ -48,7 +48,7 @@ exports.createFolder = async (req, res) => {
       userId,
       name,
       description: description || '',
-      icon: icon || '📁',
+      icon: icon || '',
       color: color || '#6366f1',
       isPrivate: Boolean(isPrivate)
     });

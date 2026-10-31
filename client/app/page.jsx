@@ -15,7 +15,7 @@ import CommandPalette from '../components/CommandPalette';
 import MobileBottomNav from '../components/MobileBottomNav';
 import InstallAppModal from '../components/InstallAppModal';
 import OnboardingGuide from '../components/OnboardingGuide';
-import { Plus, SearchX, Zap } from 'lucide-react';
+import { Plus, SearchX, Zap, Folder, Link as LinkIcon, X } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -378,7 +378,7 @@ export default function Home() {
     ? 'All Vault Items' 
     : activeFolder === 'uncategorized' 
       ? 'Uncategorized Items' 
-      : activeFolderObj ? `${activeFolderObj.icon || '📁'} ${activeFolderObj.name}` : 'Folder Items';
+      : activeFolderObj ? activeFolderObj.name : 'Folder Items';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
@@ -473,7 +473,7 @@ export default function Home() {
             }}>
               <div>
                 <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{activeFolderObj.icon || '📁'}</span>
+                  <Folder size={20} color={activeFolderObj.color || 'var(--accent-primary)'} />
                   <span>{activeFolderObj.name}</span>
                   {activeFolderObj.isPrivate && <span style={{ fontSize: '12px', background: 'rgba(236,72,153,0.2)', color: '#f472b6', padding: '2px 8px', borderRadius: '10px' }}>Private</span>}
                 </h3>
@@ -725,7 +725,7 @@ export default function Home() {
             flexShrink: 0,
             fontSize: '15px'
           }}>
-            📋
+            <LinkIcon size={16} />
           </div>
           <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -765,12 +765,14 @@ export default function Home() {
               border: 'none',
               color: 'var(--text-dim)',
               cursor: 'pointer',
-              fontSize: '14px',
-              padding: '2px'
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
             title="Dismiss"
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
       )}

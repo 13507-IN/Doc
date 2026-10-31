@@ -11,10 +11,10 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 async function seedUserDefaultFolders(userId) {
   try {
     const createdFolders = await Folder.insertMany([
-      { userId, name: 'Brand Assets', description: 'Logos, colors, brand guidelines, key media links', icon: '💼', color: '#6366f1' },
-      { userId, name: 'Private & Important', description: 'Vault for highly confidential notes, codes & credentials', icon: '🔒', color: '#ec4899', isPrivate: true },
-      { userId, name: 'YouTube & Learning', description: 'Saved YouTube videos, tutorials, tech lectures', icon: '🎥', color: '#ef4444' },
-      { userId, name: 'Web Bookmarks', description: 'Important websites, articles, docs', icon: '🌐', color: '#10b981' }
+      { userId, name: 'Brand Assets', description: 'Logos, colors, brand guidelines, key media links', icon: '', color: '#6366f1' },
+      { userId, name: 'Private & Important', description: 'Vault for highly confidential notes, codes & credentials', icon: '', color: '#ec4899', isPrivate: true },
+      { userId, name: 'YouTube & Learning', description: 'Saved YouTube videos, tutorials, tech lectures', icon: '', color: '#ef4444' },
+      { userId, name: 'Web Bookmarks', description: 'Important websites, articles, docs', icon: '', color: '#10b981' }
     ]);
 
     const travelFolder = createdFolders.find(f => f.name === 'Private & Important') || createdFolders[0];

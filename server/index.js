@@ -105,14 +105,14 @@ async function connectDB() {
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 15000
     });
-    console.log('✅ Connected to MongoDB server successfully.');
+    console.log('[MongoDB] Connected to MongoDB server successfully.');
   } catch (err) {
     if (process.env.NODE_ENV === 'production') {
-      console.error(`❌ MongoDB connection error: ${err.message}. In-memory fallback is disabled in production.`);
+      console.error(`[MongoDB] Connection error: ${err.message}. In-memory fallback is disabled in production.`);
       return;
     }
 
-    console.warn(`⚠️ MongoDB connection error: ${err.message}. Attempting MongoMemoryServer Fallback...`);
+    console.warn(`[MongoDB] Connection error: ${err.message}. Attempting MongoMemoryServer Fallback...`);
     try {
       const mongod = await MongoMemoryServer.create({
         binary: {
@@ -121,9 +121,9 @@ async function connectDB() {
       });
       const memoryUri = mongod.getUri();
       await mongoose.connect(memoryUri, { dbName: 'holder_db' });
-      console.log(`🚀 Connected to In-Memory MongoDB instance at: ${memoryUri}`);
+      console.log(`[MongoDB] Connected to In-Memory MongoDB instance at: ${memoryUri}`);
     } catch (memErr) {
-      console.error('❌ Failed to start In-Memory MongoDB:', memErr.message);
+      console.error('[MongoDB] Failed to start In-Memory MongoDB:', memErr.message);
     }
   }
 }
@@ -131,6 +131,6 @@ async function connectDB() {
 connectDB().then(() => {
   verifyCloudinary();
   app.listen(PORT, () => {
-    console.log(`⚡ Holder Server ready on port http://localhost:${PORT}`);
+    console.log(`[Server] Holder API ready on port http://localhost:${PORT}`);
   });
 });

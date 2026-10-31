@@ -417,7 +417,7 @@ function ShareContent() {
               color: '#fff',
               fontWeight: 800
             }}>
-              ⚡
+              <Sparkles size={18} color="#fff" />
             </div>
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>Holder Mobile Share</h2>
@@ -633,10 +633,10 @@ function ShareContent() {
                 className="glass-input"
                 style={{ width: '100%', fontSize: '13px', background: 'var(--bg-primary)' }}
               >
-                <option value="">📁 Uncategorized</option>
+                <option value="">Uncategorized</option>
                 {folders.map(f => (
                   <option key={f._id} value={f._id}>
-                    {f.icon || '📁'} {f.name}
+                    {f.name}
                   </option>
                 ))}
               </select>

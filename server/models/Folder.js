@@ -17,7 +17,7 @@ const folderSchema = new mongoose.Schema({
   },
   icon: {
     type: String,
-    default: '📁'
+    default: ''
   },
   color: {
     type: String,

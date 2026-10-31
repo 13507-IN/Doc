@@ -258,10 +258,10 @@ export default function ItemCard({
                 color: item.folderId.color || '#93c5fd',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
+                gap: '5px',
                 fontWeight: 600
               }}>
-                <span>{item.folderId.icon || '📁'}</span>
+                <Folder size={12} color={item.folderId.color || '#93c5fd'} />
                 <span>{item.folderId.name}</span>
               </span>
             )}

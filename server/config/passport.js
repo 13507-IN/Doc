@@ -8,10 +8,10 @@ const Item = require('../models/Item');
 async function seedUserDefaultFolders(userId) {
   try {
     const createdFolders = await Folder.insertMany([
-      { userId, name: 'Brand Assets', description: 'Logos, colors, brand guidelines, key media links', icon: '💼', color: '#6366f1' },
-      { userId, name: 'Private & Important', description: 'Vault for highly confidential notes, codes & credentials', icon: '🔒', color: '#ec4899', isPrivate: true },
-      { userId, name: 'YouTube & Learning', description: 'Saved YouTube videos, tutorials, tech lectures', icon: '🎥', color: '#ef4444' },
-      { userId, name: 'Web Bookmarks', description: 'Important websites, articles, docs', icon: '🌐', color: '#10b981' }
+      { userId, name: 'Brand Assets', description: 'Logos, colors, brand guidelines, key media links', icon: '', color: '#6366f1' },
+      { userId, name: 'Private & Important', description: 'Vault for highly confidential notes, codes & credentials', icon: '', color: '#ec4899', isPrivate: true },
+      { userId, name: 'YouTube & Learning', description: 'Saved YouTube videos, tutorials, tech lectures', icon: '', color: '#ef4444' },
+      { userId, name: 'Web Bookmarks', description: 'Important websites, articles, docs', icon: '', color: '#10b981' }
     ]);
 
     const travelFolder = createdFolders.find(f => f.name === 'Private & Important') || createdFolders[0];
@@ -77,7 +77,7 @@ module.exports = function configurePassport() {
   const SERVER_URL = process.env.SERVER_URL || 'http://localhost:5000';
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    console.warn('⚠️ GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing in environment variables. Google OAuth will be disabled until set.');
+    console.warn('[Passport] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing in environment variables. Google OAuth will be disabled until set.');
     return;
   }
 

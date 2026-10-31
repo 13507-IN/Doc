@@ -336,7 +336,7 @@ export default function InstallAppModal({
                   {platform === 'android' ? (
                     <>Tap browser menu (<strong>⋮</strong>) at top-right &gt; select <strong style={{ color: '#60a5fa' }}>"Install app"</strong> or <strong style={{ color: '#60a5fa' }}>"Add to Home screen"</strong>.</>
                   ) : (
-                    <>Look for the <strong style={{ color: '#60a5fa' }}>Install icon (📥)</strong> in your browser address bar, or open menu (⋮) &gt; <strong style={{ color: '#60a5fa' }}>"Install Holder"</strong>.</>
+                    <>Look for the <strong style={{ color: '#60a5fa' }}>Install icon</strong> in your browser address bar, or open menu (⋮) &gt; <strong style={{ color: '#60a5fa' }}>"Install Holder"</strong>.</>
                   )}
                 </p>
               </div>

@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon, Globe } from 'lucide-react';
+import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon, Globe, Tv, FileText, Folder, Lock } from 'lucide-react';
 import axios from 'axios';
 import ClickableText from './ClickableText';
 import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
@@ -150,11 +150,11 @@ export default function AIAssistantDrawer({
 
         {/* Suggested Prompts */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', overflowX: 'auto', background: 'var(--bg-primary)' }}>
-          <PromptChip onClick={() => handleSend('Get all my YouTube links')} label="🎥 YouTube Links" />
-          <PromptChip onClick={() => handleSend('Show my PDF documents')} label="📄 PDF Documents" />
-          <PromptChip onClick={() => handleSend('Show Brand Assets folder')} label="💼 Brand Assets" />
-          <PromptChip onClick={() => handleSend('Find my screenshots')} label="📸 Screenshots" />
-          <PromptChip onClick={() => handleSend('Find private & important notes')} label="🔒 Private Notes" />
+          <PromptChip onClick={() => handleSend('Get all my YouTube links')} icon={<Tv size={13} color="#ef4444" />} label="YouTube Links" />
+          <PromptChip onClick={() => handleSend('Show my PDF documents')} icon={<FileText size={13} color="#f43f5e" />} label="PDF Documents" />
+          <PromptChip onClick={() => handleSend('Show Brand Assets folder')} icon={<Folder size={13} color="#6366f1" />} label="Brand Assets" />
+          <PromptChip onClick={() => handleSend('Find my screenshots')} icon={<ImageIcon size={13} color="#059669" />} label="Screenshots" />
+          <PromptChip onClick={() => handleSend('Find private & important notes')} icon={<Lock size={13} color="#ec4899" />} label="Private Notes" />
         </div>
 
         {/* Chat Timeline */}
@@ -340,11 +340,14 @@ export default function AIAssistantDrawer({
   );
 }
 
-function PromptChip({ onClick, label }) {
+function PromptChip({ onClick, icon, label }) {
   return (
     <button 
       onClick={onClick}
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
         padding: '5px 10px',
         borderRadius: '6px',
         background: 'var(--bg-secondary)',
@@ -365,7 +368,8 @@ function PromptChip({ onClick, label }) {
         e.currentTarget.style.color = 'var(--text-muted)';
       }}
     >
-      {label}
+      {icon}
+      <span>{label}</span>
     </button>
   );
 }

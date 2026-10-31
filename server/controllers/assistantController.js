@@ -145,7 +145,7 @@ exports.queryAssistant = async (req, res) => {
           }
 
           if (foundUrl) {
-            directSnippet = `🌐 Link from "${item.title}":\n[${foundUrl}](${foundUrl})`;
+            directSnippet = `Link from "${item.title}":\n[${foundUrl}](${foundUrl})`;
             item.url = foundUrl;
             break;
           }
@@ -164,7 +164,7 @@ exports.queryAssistant = async (req, res) => {
                      (cleanQuery.includes('wifi') && (lower.includes('wifi') || lower.includes('network')));
             });
             if (foundLine) {
-              directSnippet = `💡 Extracted from "${item.title}":\n"${foundLine}"`;
+              directSnippet = `Found in "${item.title}":\n"${foundLine}"`;
               break;
             }
           }

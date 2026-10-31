@@ -178,7 +178,7 @@ export default function Sidebar({
             key={folder._id}
             active={activeFolder === folder._id}
             onClick={() => handleFolderClick(folder._id)}
-            icon={<span style={{ fontSize: '14px' }}>{folder.icon || '📁'}</span>}
+            icon={<Folder size={15} color={folder.color || 'var(--accent-primary)'} />}
             label={folder.name}
             count={folder.itemCount}
             isPrivate={folder.isPrivate}

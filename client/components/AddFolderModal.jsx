@@ -1,18 +1,16 @@
 'use client';
 import React, { useState } from 'react';
-import { X, Lock, Folder } from 'lucide-react';
+import { X, Lock, Folder, Check } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const EMOJI_OPTIONS = ['💼', '🔒', '🎥', '🌐', '🚀', '💡', '🎨', '📚', '⚡', '💻', '🔑', '🎯'];
-const COLOR_OPTIONS = ['#6366f1', '#ec4899', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'];
+const COLOR_OPTIONS = ['#2563eb', '#3b82f6', '#059669', '#10b981', '#d97706', '#dc2626', '#e11d48', '#7c3aed', '#64748b'];
 
 export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('💼');
-  const [color, setColor] = useState('#6366f1');
+  const [color, setColor] = useState('#2563eb');
   const [isPrivate, setIsPrivate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,7 +23,7 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token
       const res = await axios.post(`${API_BASE}/folders`, {
         name,
         description,
-        icon,
+        icon: '',
         color,
         isPrivate
       }, {
@@ -81,52 +79,34 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Folder Color Palette */}
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>
-              Folder Icon
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>
+              Folder Color
             </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {EMOJI_OPTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => setIcon(emoji)}
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    background: icon === emoji ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255, 255, 255, 0.05)',
-                    border: icon === emoji ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    fontSize: '18px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>
-              Color Badge
-            </label>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {COLOR_OPTIONS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
                   style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
                     backgroundColor: c,
-                    border: color === c ? '2px solid #fff' : 'none',
+                    border: color === c ? '2px solid #fff' : '1px solid rgba(255, 255, 255, 0.1)',
                     cursor: 'pointer',
-                    transform: color === c ? 'scale(1.15)' : 'scale(1)'
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: color === c ? 'scale(1.1)' : 'scale(1)',
+                    transition: 'transform 0.15s ease'
                   }}
-                />
+                  title={c}
+                >
+                  {color === c && <Check size={16} color="#fff" />}
+                </button>
               ))}
             </div>
           </div>
@@ -139,7 +119,7 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Brand Assets, Private Vault, Video Ideas"
+              placeholder="e.g. Brand Assets, Video Ideas, Travel Receipts"
               className="glass-input"
               style={{ width: '100%' }}
               required
@@ -148,40 +128,60 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token
 
           <div>
             <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>
-              Description
+              Description (Optional)
             </label>
-            <input 
-              type="text"
+            <textarea 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description of what goes inside this folder..."
+              placeholder="What kind of items live here?"
               className="glass-input"
-              style={{ width: '100%' }}
+              rows={2}
+              style={{ width: '100%', resize: 'none' }}
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 14px',
+            background: 'var(--bg-primary)',
+            borderRadius: '10px',
+            border: '1px solid var(--border-color)',
+            cursor: 'pointer'
+          }} onClick={() => setIsPrivate(!isPrivate)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Lock size={16} color={isPrivate ? '#059669' : 'var(--text-muted)'} />
+              <div>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>Lock as Private</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Require explicit unlock or password check</p>
+              </div>
+            </div>
             <input 
               type="checkbox"
-              id="folderPrivate"
               checked={isPrivate}
               onChange={(e) => setIsPrivate(e.target.checked)}
-              style={{ accentColor: 'var(--accent-pink)', cursor: 'pointer' }}
+              style={{ cursor: 'pointer', width: '16px', height: '16px' }}
             />
-            <label htmlFor="folderPrivate" style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Lock size={14} color="#ec4899" />
-              <span>Mark as Private / Important Folder</span>
-            </label>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-            <button type="button" onClick={onClose} style={{ padding: '10px 18px', borderRadius: '10px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              Cancel
-            </button>
-            <button type="submit" disabled={submitting} style={{ padding: '10px 24px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-              {submitting ? 'Creating...' : 'Create Folder'}
-            </button>
-          </div>
+          <button 
+            type="submit"
+            disabled={submitting || !name.trim()}
+            style={{
+              padding: '12px',
+              borderRadius: '10px',
+              background: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: submitting ? 'wait' : 'pointer',
+              marginTop: '8px'
+            }}
+          >
+            {submitting ? 'Creating Folder...' : 'Create Folder'}
+          </button>
         </form>
       </div>
     </div>

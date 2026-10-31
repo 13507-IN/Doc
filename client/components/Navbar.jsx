@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, Plus, Sparkles, RefreshCw, Menu, Download } from 'lucide-react';
+import { Search, Plus, Sparkles, RefreshCw, Menu, Download, X } from 'lucide-react';
 
 export default function Navbar({ 
   searchQuery, 
@@ -78,10 +78,14 @@ export default function Navbar({
               border: 'none',
               color: 'var(--text-muted)',
               cursor: 'pointer',
-              fontSize: '12px'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2px'
             }}
+            title="Clear search"
           >
-            ✕
+            <X size={14} />
           </button>
         ) : (
           <span className="navbar-cmd-k">
