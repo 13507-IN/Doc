@@ -1,6 +1,7 @@
 const Item = require('../models/Item');
 const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
 const { enqueueItemOcr, recognize } = require('../services/ocrService');
+const { invalidateAssistantCache } = require('./assistantController');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -224,6 +225,7 @@ exports.createItem = async (req, res) => {
     });
 
     await item.save();
+    invalidateAssistantCache(userId);
     const populatedItem = await Item.findById(item._id).populate('folderId', 'name icon color');
 
     res.status(201).json({ success: true, item: populatedItem });
@@ -269,6 +271,7 @@ exports.updateItem = async (req, res) => {
       fs.promises.unlink(path.join(uploadsDir, oldLocal)).catch(() => {});
     }
 
+    invalidateAssistantCache(userId);
     res.json({ success: true, item });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -330,28 +333,30 @@ exports.deleteItem = async (req, res) => {
     if (localFilename) {
       fs.promises.unlink(path.join(uploadsDir, localFilename)).catch(() => {});
     }
+    invalidateAssistantCache(userId);
     res.json({ success: true, message: 'Item deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Handle image upload with Cloudinary and local disk fallback
+// Handle image upload with Cloudinary and local disk fallback (concurrent store + OCR)
 exports.uploadImage = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No image file uploaded' });
     }
 
-    let ocrText = '';
-    if (req.query.ocr === 'true') {
-      try {
-        ocrText = await recognize(req.file.buffer);
-      } catch (ocrErr) {
-        console.error('[OCR] Synchronous processing failed:', ocrErr.message);
-      }
-    }
-    const stored = await storeImage(req);
+    const shouldOcr = req.query.ocr === 'true';
+    const [stored, ocrText] = await Promise.all([
+      storeImage(req),
+      shouldOcr
+        ? recognize(req.file.buffer).catch((ocrErr) => {
+            console.error('[OCR] Fast OCR processing failed:', ocrErr.message);
+            return '';
+          })
+        : Promise.resolve('')
+    ]);
 
     res.json({
       success: true,
@@ -405,6 +410,8 @@ exports.createScreenshot = async (req, res) => {
       },
       ocrStatus: 'pending'
     });
+
+    invalidateAssistantCache(req.user.id);
 
     res.status(201).json({
       success: true,

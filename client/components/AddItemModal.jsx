@@ -8,7 +8,69 @@ import axios from 'axios';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, editingItem, prefillUrl, token }) {
+// Fast client-side image compressor: turns large 10-15MB mobile PNG screenshots into ~300KB in ~30ms
+async function compressImageClientSide(file) {
+  if (typeof window === 'undefined' || !file) return file;
+  const isImage = file.type ? file.type.startsWith('image/') : true;
+  if (!isImage || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    return file;
+  }
+  // If already under 400 KB, no need to compress further
+  if (file.size && file.size < 400 * 1024) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const MAX_DIM = 1920;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File([blob], file.name ? file.name.replace(/\.[^.]+$/, '.jpg') : 'screenshot.jpg', {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+          resolve(compressed);
+        }, 'image/jpeg', 0.88);
+      };
+      img.onerror = () => resolve(file);
+      img.src = objectUrl;
+    } catch {
+      resolve(file);
+    }
+  });
+}
+
+export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdded, defaultFolderId, editingItem, prefillUrl, initialPastedFile, token }) {
   const [activeTab, setActiveTab] = useState('youtube'); // youtube | image | pdf | link | note
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -192,13 +254,14 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     }
   };
 
-  // Handle image file upload
-  const handleImageFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // Process image with client-side compression and upload with fast OCR
+  const processAndUploadImage = async (rawFile) => {
+    if (!rawFile) return;
 
     try {
       setUploadingImage(true);
+      setSaveError('');
+      const file = await compressImageClientSide(rawFile);
       const formData = new FormData();
       formData.append('image', file);
 
@@ -218,10 +281,16 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         setMetadata((current) => ({
           ...current,
           cloudinaryPublicId: res.data.cloudinaryPublicId,
-          localFilename: res.data.localFilename
+          localFilename: res.data.localFilename,
+          ...(res.data.ocrText ? { ocrPreview: res.data.ocrText.slice(0, 160) } : {})
         }));
-        setOcrText(res.data.ocrText || '');
-        if (!title) setTitle(file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, ' ').trim());
+        if (res.data.ocrText) {
+          setOcrText(res.data.ocrText);
+        }
+        if (!title) {
+          const rawName = rawFile.name ? rawFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, ' ').trim() : '';
+          setTitle(rawName || `Screenshot — ${new Date().toLocaleDateString()}`);
+        }
       }
     } catch (err) {
       console.error('Image upload error:', err);
@@ -230,6 +299,46 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       setUploadingImage(false);
     }
   };
+
+  // Handle image file upload from input
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await processAndUploadImage(file);
+  };
+
+  // Watch for initial pasted file prop when opening modal
+  useEffect(() => {
+    if (isOpen && initialPastedFile) {
+      setActiveTab('image');
+      processAndUploadImage(initialPastedFile);
+    }
+  }, [isOpen, initialPastedFile]);
+
+  // Handle clipboard paste inside modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleModalPaste = (e) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        if (clipboardItems[i].type.indexOf('image') !== -1) {
+          const blob = clipboardItems[i].getAsFile();
+          if (blob) {
+            e.preventDefault();
+            setActiveTab('image');
+            processAndUploadImage(blob);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleModalPaste);
+    return () => window.removeEventListener('paste', handleModalPaste);
+  }, [isOpen, token, title]);
 
   // Handle PDF file upload
   const handlePdfFileChange = async (e) => {

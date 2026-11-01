@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
@@ -11,6 +12,7 @@ const session = require('express-session');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const configurePassport = require('./config/passport');
 const { verifyCloudinary } = require('./config/cloudinary');
+const { initWorker: initOcrWorker } = require('./services/ocrService');
 
 dotenv.config();
 
@@ -28,6 +30,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   frameguard: false
 }));
+app.use(compression({ threshold: 1024, level: 6 }));
 app.use(cors());
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -39,9 +42,10 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   res.removeHeader('X-Frame-Options');
   next();
-}, express.static(uploadsDir));
+}, express.static(uploadsDir, { maxAge: '7d', immutable: true }));
 
 // Express Session & Passport Middleware
 app.use(
@@ -130,6 +134,7 @@ async function connectDB() {
 
 connectDB().then(() => {
   verifyCloudinary();
+  initOcrWorker().catch(() => {});
   app.listen(PORT, () => {
     console.log(`[Server] Holder API ready on port http://localhost:${PORT}`);
   });

@@ -39,6 +39,7 @@ export default function Home() {
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [prefillUrl, setPrefillUrl] = useState('');
+  const [pastedImageFile, setPastedImageFile] = useState(null);
   const [copiedUrl, setCopiedUrl] = useState('');
   const [dismissedCopiedUrl, setDismissedCopiedUrl] = useState('');
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
@@ -310,6 +311,36 @@ export default function Home() {
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
   }, []);
+
+  // Global clipboard image paste: Ctrl+V anywhere on page captures screenshot into AddItemModal
+  useEffect(() => {
+    if (!token) return;
+
+    const handleGlobalPaste = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) {
+        return;
+      }
+
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        if (clipboardItems[i].type.indexOf('image') !== -1) {
+          const file = clipboardItems[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            setPastedImageFile(file);
+            setIsAddItemOpen(true);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -627,16 +658,19 @@ export default function Home() {
           setIsAddItemOpen(false);
           setEditingItem(null);
           setPrefillUrl('');
+          setPastedImageFile(null);
         }}
         folders={folders}
         defaultFolderId={activeFolder}
         editingItem={editingItem}
         prefillUrl={prefillUrl}
+        initialPastedFile={pastedImageFile}
         onItemAdded={() => {
           fetchItems();
           fetchFolders();
           setEditingItem(null);
           setPrefillUrl('');
+          setPastedImageFile(null);
         }}
         token={token}
       />

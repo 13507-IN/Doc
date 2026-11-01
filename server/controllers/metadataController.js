@@ -6,6 +6,8 @@ const net = require('net');
 const metadataCache = new Map();
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
+const hostnameValidationCache = new Map();
+const HOSTNAME_CACHE_TTL_MS = 60 * 60 * 1000;
 
 function getCachedMetadata(url) {
   const cached = metadataCache.get(url);
@@ -59,12 +61,25 @@ async function assertPublicHttpUrl(parsedUrl) {
     throw new Error('Local network URLs are not supported');
   }
 
+  const cachedEntry = hostnameValidationCache.get(hostname);
+  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+    if (!cachedEntry.isValid) {
+      throw new Error('Local network URLs are not supported');
+    }
+    return;
+  }
+
   const addresses = net.isIP(hostname)
     ? [{ address: hostname }]
     : await dns.lookup(hostname, { all: true, verbatim: true });
   if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
+    if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
+    hostnameValidationCache.set(hostname, { isValid: false, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
     throw new Error('Local network URLs are not supported');
   }
+
+  if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
+  hostnameValidationCache.set(hostname, { isValid: true, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
 }
 
 // Extract YouTube ID from various YouTube URL formats

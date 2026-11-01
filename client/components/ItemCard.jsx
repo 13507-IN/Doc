@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 
-export default function ItemCard({ 
+const ItemCard = React.memo(function ItemCard({ 
   item, 
   onPlayYouTube, 
   onViewImage, 
@@ -519,4 +519,6 @@ export default function ItemCard({
       </div>
     </div>
   );
-}
+});
+
+export default ItemCard;

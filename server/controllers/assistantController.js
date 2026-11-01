@@ -6,6 +6,42 @@ function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// In-memory query cache for instant (0ms) repeated assistant queries
+const queryCache = new Map();
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
+const MAX_CACHE_ENTRIES = 200;
+
+function getCachedQuery(userId, query) {
+  const key = `${userId}:${query.trim().toLowerCase()}`;
+  const cached = queryCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+  if (cached) queryCache.delete(key);
+  return null;
+}
+
+function setCachedQuery(userId, query, result) {
+  if (queryCache.size >= MAX_CACHE_ENTRIES) {
+    queryCache.delete(queryCache.keys().next().value);
+  }
+  const key = `${userId}:${query.trim().toLowerCase()}`;
+  queryCache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+function invalidateAssistantCache(userId) {
+  if (!userId) {
+    queryCache.clear();
+    return;
+  }
+  const prefix = `${userId}:`;
+  for (const key of queryCache.keys()) {
+    if (key.startsWith(prefix)) {
+      queryCache.delete(key);
+    }
+  }
+}
+
 // Process assistant query scoped to current user
 exports.queryAssistant = async (req, res) => {
   try {
@@ -15,8 +51,14 @@ exports.queryAssistant = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Query prompt is required' });
     }
 
+    // Check query cache first for sub-millisecond retrieval
+    const cachedResponse = getCachedQuery(userId, query);
+    if (cachedResponse) {
+      return res.json(cachedResponse);
+    }
+
     const cleanQuery = query.toLowerCase().trim();
-    const allFolders = await Folder.find({ userId }).lean();
+    const allFolders = await Folder.find({ userId }).sort({ createdAt: -1 }).lean();
 
     let matchedItems = [];
     let assistantMessage = '';
@@ -58,44 +100,70 @@ exports.queryAssistant = async (req, res) => {
       .split(/\W+/)
       .filter((term) => term.length > 2 && !ignoredTerms.has(term));
 
-    const orConditions = [];
-    if (screenshotIntent) {
-      orConditions.push(
-        { tags: { $in: ['screenshot', 'snap', 'capture'] } },
-        { title: { $regex: 'screenshot|screen|snap', $options: 'i' } },
-        { url: { $regex: 'screenshot', $options: 'i' } }
-      );
-    }
-    if (keywordTerms.length > 0) {
-      const escapedKeywords = keywordTerms.map(escapeRegex).join('|');
-      orConditions.push(
-        { title: { $regex: escapedKeywords, $options: 'i' } },
-        { content: { $regex: escapedKeywords, $options: 'i' } },
-        { ocrText: { $regex: escapedKeywords, $options: 'i' } },
-        { url: { $regex: escapedKeywords, $options: 'i' } },
-        { tags: { $elemMatch: { $regex: escapedKeywords, $options: 'i' } } }
-      );
-    }
+    // 1. Try High-Performance MongoDB Text Index Search first
+    let textMatchedItems = [];
+    if (keywordTerms.length > 0 && !screenshotIntent) {
+      try {
+        const textConditions = { userId, $text: { $search: keywordTerms.join(' ') } };
+        if (targetFolder) textConditions.folderId = targetFolder._id;
+        if (categoryDetected) textConditions.type = categoryDetected;
 
-    const itemQuery = andConditions.length === 1 ? { userId } : { $and: andConditions };
-    if (orConditions.length > 0) {
-      if (itemQuery.$and) {
-        itemQuery.$and.push({ $or: orConditions });
-      } else {
-        itemQuery.$or = orConditions;
+        textMatchedItems = await Item.find(
+          textConditions,
+          { score: { $meta: 'textScore' } }
+        )
+          .populate('folderId', 'name icon color')
+          .sort({ score: { $meta: 'textScore' }, pinned: -1, createdAt: -1 })
+          .limit(35)
+          .lean();
+      } catch (err) {
+        textMatchedItems = [];
       }
     }
 
-    matchedItems = await Item.find(itemQuery)
-      .populate('folderId', 'name icon color')
-      .sort({ pinned: -1, createdAt: -1 })
-      .limit(35)
-      .lean();
+    if (textMatchedItems.length > 0) {
+      matchedItems = textMatchedItems;
+    } else {
+      // 2. High-Recall Regex pipeline fallback
+      const orConditions = [];
+      if (screenshotIntent) {
+        orConditions.push(
+          { tags: { $in: ['screenshot', 'snap', 'capture'] } },
+          { title: { $regex: 'screenshot|screen|snap', $options: 'i' } },
+          { url: { $regex: 'screenshot', $options: 'i' } }
+        );
+      }
+      if (keywordTerms.length > 0) {
+        const escapedKeywords = keywordTerms.map(escapeRegex).join('|');
+        orConditions.push(
+          { title: { $regex: escapedKeywords, $options: 'i' } },
+          { content: { $regex: escapedKeywords, $options: 'i' } },
+          { ocrText: { $regex: escapedKeywords, $options: 'i' } },
+          { url: { $regex: escapedKeywords, $options: 'i' } },
+          { tags: { $elemMatch: { $regex: escapedKeywords, $options: 'i' } } }
+        );
+      }
+
+      const itemQuery = andConditions.length === 1 ? { userId } : { $and: andConditions };
+      if (orConditions.length > 0) {
+        if (itemQuery.$and) {
+          itemQuery.$and.push({ $or: orConditions });
+        } else {
+          itemQuery.$or = orConditions;
+        }
+      }
+
+      matchedItems = await Item.find(itemQuery)
+        .populate('folderId', 'name icon color')
+        .sort({ pinned: -1, createdAt: -1 })
+        .limit(35)
+        .lean();
+    }
 
     // AI Relevance Ranking
     if (keywordTerms.length > 0 && matchedItems.length > 0) {
       matchedItems.forEach(item => {
-        let score = 0;
+        let score = (item.score || 0) * 10;
         const lowerTitle = (item.title || '').toLowerCase();
         const lowerContent = (item.content || '').toLowerCase();
         const lowerOcr = (item.ocrText || '').toLowerCase();
@@ -134,7 +202,7 @@ exports.queryAssistant = async (req, res) => {
       let directSnippet = '';
 
       if (isLinkQuery && matchedItems.length > 0) {
-        for (const item of matchedItems) {
+        for (const item of matchedItems.slice(0, 10)) {
           let foundUrl = item.metadata?.detectedUrls?.[0];
           if (!foundUrl && item.ocrText) {
             const extracted = extractUrlsFromText(item.ocrText);
@@ -153,7 +221,7 @@ exports.queryAssistant = async (req, res) => {
       }
 
       if (!directSnippet && isQuestion && matchedItems.length > 0) {
-        for (const item of matchedItems.slice(0, 3)) {
+        for (const item of matchedItems.slice(0, 10)) {
           const combinedText = `${item.content || ''}\n${item.ocrText || ''}`.trim();
           if (combinedText) {
             const lines = combinedText.split('\n').map(l => l.trim()).filter(Boolean);
@@ -192,17 +260,22 @@ exports.queryAssistant = async (req, res) => {
       });
     }
 
-    res.json({
+    const responsePayload = {
       success: true,
       query,
       answer: assistantMessage,
       count: totalCount,
       matchedItems,
       targetFolder: targetFolder ? { id: targetFolder._id, name: targetFolder.name } : null
-    });
+    };
+
+    setCachedQuery(userId, query, responsePayload);
+    res.json(responsePayload);
 
   } catch (error) {
     console.error('Error in queryAssistant:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.invalidateAssistantCache = invalidateAssistantCache;
