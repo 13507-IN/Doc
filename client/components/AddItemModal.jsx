@@ -1,8 +1,8 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Tv, Image as ImageIcon, Link as LinkIcon, FileText, 
-  Upload, Lock, AlertCircle
+  Upload, Lock, AlertCircle, Loader2
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -93,11 +93,16 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
+  const lastExtractedUrlRef = useRef('');
 
   const isEditing = Boolean(editingItem);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      lastExtractedUrlRef.current = '';
+      return;
+    }
+    lastExtractedUrlRef.current = '';
     const timer = window.setTimeout(() => {
       if (editingItem) {
         setActiveTab(editingItem.type);
@@ -198,26 +203,28 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     return () => window.clearTimeout(timer);
   }, [defaultFolderId, editingItem, prefillUrl, isOpen]);
 
-  // Handle URL change & auto extract metadata
-  const handleUrlBlur = async () => {
-    if (!url) return;
+  // Handle URL change & auto extract metadata immediately
+  const extractMetadataForUrl = async (targetUrl) => {
+    const rawUrl = (targetUrl !== undefined ? targetUrl : url)?.trim();
+    if (!rawUrl || (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://'))) return;
+    if (lastExtractedUrlRef.current === rawUrl) return;
 
-    if (activeTab === 'pdf') {
+    if (activeTab === 'pdf' || rawUrl.toLowerCase().endsWith('.pdf')) {
       try {
-        const rawEnd = url.split('/').pop().split('?')[0];
+        const rawEnd = rawUrl.split('/').pop().split('?')[0];
         const cleanName = decodeURIComponent(rawEnd || 'document.pdf');
         const clean = cleanName.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim();
         if (clean && !title) setTitle(clean);
         if (cleanName && !pdfFileName) setPdfFileName(cleanName);
+        if (activeTab !== 'pdf') setActiveTab('pdf');
       } catch {}
       return;
     }
 
-    if (activeTab !== 'youtube' && activeTab !== 'link') return;
-
     try {
+      lastExtractedUrlRef.current = rawUrl;
       setLoadingMetadata(true);
-      const res = await axios.post(`${API_BASE}/metadata/extract`, { url });
+      const res = await axios.post(`${API_BASE}/metadata/extract`, { url: rawUrl });
       if (res.data.success) {
         setTitle(res.data.title || title);
         setPreviewUrl(res.data.previewUrl || previewUrl);
@@ -253,6 +260,19 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       setLoadingMetadata(false);
     }
   };
+
+  // Debounced auto-extractor: starts fetching within 350ms of pasting or typing a URL
+  useEffect(() => {
+    if (!isOpen) return;
+    const clean = url?.trim();
+    if (!clean || (!clean.startsWith('http://') && !clean.startsWith('https://'))) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      extractMetadataForUrl(clean);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [url, isOpen]);
 
   // Process image with client-side compression and upload with fast OCR
   const processAndUploadImage = async (rawFile) => {
@@ -547,15 +567,35 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                   type="url"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  onBlur={handleUrlBlur}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData?.getData('text')?.trim();
+                    if (pasted && (pasted.startsWith('http://') || pasted.startsWith('https://'))) {
+                      setUrl(pasted);
+                      extractMetadataForUrl(pasted);
+                    }
+                  }}
+                  onBlur={() => extractMetadataForUrl(url)}
                   placeholder={activeTab === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://example.com'}
                   className="glass-input"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', paddingRight: loadingMetadata ? '135px' : '14px' }}
                   required
                 />
                 {loadingMetadata && (
-                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--accent-primary)' }}>
-                    Fetching metadata...
+                  <span style={{ 
+                    position: 'absolute', 
+                    right: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)', 
+                    fontSize: '11px', 
+                    fontWeight: 500,
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    pointerEvents: 'none'
+                  }}>
+                    <Loader2 size={13} className="animate-spin" />
+                    Fetching preview...
                   </span>
                 )}
               </div>
@@ -581,7 +621,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                       return next;
                     });
                   }}
-                  onBlur={handleUrlBlur}
+                  onBlur={() => extractMetadataForUrl(url)}
                   placeholder="https://example.com/sample.pdf"
                   className="glass-input"
                   style={{ flex: 1 }}

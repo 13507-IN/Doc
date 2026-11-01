@@ -57,10 +57,19 @@ async function assertPublicHttpUrl(parsedUrl) {
   }
 
   const hostname = parsedUrl.hostname;
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')) {
     throw new Error('Local network URLs are not supported');
   }
 
+  // Direct IP address check without DNS roundtrip
+  if (net.isIP(hostname)) {
+    if (isPrivateAddress(hostname)) {
+      throw new Error('Local network URLs are not supported');
+    }
+    return;
+  }
+
+  // Fast cache check
   const cachedEntry = hostnameValidationCache.get(hostname);
   if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
     if (!cachedEntry.isValid) {
@@ -69,17 +78,21 @@ async function assertPublicHttpUrl(parsedUrl) {
     return;
   }
 
-  const addresses = net.isIP(hostname)
-    ? [{ address: hostname }]
-    : await dns.lookup(hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
-    if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
-    hostnameValidationCache.set(hostname, { isValid: false, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
-    throw new Error('Local network URLs are not supported');
-  }
+  try {
+    // Fast standard lookup without IPv6 AAAA timeout stalls
+    const { address } = await dns.lookup(hostname);
+    if (!address || isPrivateAddress(address)) {
+      if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
+      hostnameValidationCache.set(hostname, { isValid: false, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
+      throw new Error('Local network URLs are not supported');
+    }
 
-  if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
-  hostnameValidationCache.set(hostname, { isValid: true, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
+    if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
+    hostnameValidationCache.set(hostname, { isValid: true, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
+  } catch (err) {
+    if (err.message.includes('Local network')) throw err;
+    // If DNS check fails, allow fetch to proceed; axios will handle resolution errors
+  }
 }
 
 // Extract YouTube ID from various YouTube URL formats
@@ -135,28 +148,32 @@ function generateSmartSummary(description = '') {
   return sentences.slice(0, 3).map(s => `• ${s.trim()}`).join('\n');
 }
 
-// Extract rich metadata from a URL (YouTube video or website)
+// Extract rich metadata from a URL (YouTube video, PDF, or website)
 exports.extractMetadata = async (req, res) => {
   try {
     const { url } = req.body;
     if (!url) {
       return res.status(400).json({ success: false, message: 'URL is required' });
     }
+
     let parsedUrl;
     try {
-      parsedUrl = new URL(url);
+      parsedUrl = new URL(url.trim());
     } catch {
       return res.status(400).json({ success: false, message: 'A valid URL is required' });
     }
+
+    // 1. Fast Cache Check: 0ms return if already fetched
+    const cached = getCachedMetadata(parsedUrl.href);
+    if (cached) return res.json(cached);
+
     try {
       await assertPublicHttpUrl(parsedUrl);
     } catch (error) {
       return res.status(400).json({ success: false, message: error.message });
     }
-    const cached = getCachedMetadata(parsedUrl.href);
-    if (cached) return res.json(cached);
 
-    // Check if URL directly points to a PDF document
+    // 2. Direct PDF document check
     if (parsedUrl.pathname.toLowerCase().endsWith('.pdf')) {
       const rawName = decodeURIComponent(parsedUrl.pathname.split('/').pop() || 'document.pdf');
       const cleanTitle = rawName.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() || 'PDF Document';
@@ -175,13 +192,15 @@ exports.extractMetadata = async (req, res) => {
       return res.json(responsePayload);
     }
 
+    // 3. YouTube link check
     const youtubeId = extractYouTubeId(parsedUrl.href);
-
     if (youtubeId) {
-      // Fetch oEmbed data from YouTube
+      const defaultPreview = `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+      const fallbackPreview = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+
       try {
         const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`;
-        const { data } = await axios.get(oembedUrl, { timeout: 5000 });
+        const { data } = await axios.get(oembedUrl, { timeout: 2500 });
 
         const rawTitle = data.title || 'YouTube Video';
         const authorName = data.author_name || '';
@@ -193,8 +212,8 @@ exports.extractMetadata = async (req, res) => {
           youtubeId,
           title: rawTitle,
           authorName,
-          previewUrl: `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
-          fallbackPreviewUrl: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
+          previewUrl: defaultPreview,
+          fallbackPreviewUrl: fallbackPreview,
           embedUrl: `https://www.youtube.com/embed/${youtubeId}?autoplay=1`,
           suggestedTags,
           suggestedFolderType: 'youtube',
@@ -207,39 +226,64 @@ exports.extractMetadata = async (req, res) => {
         cacheMetadata(parsedUrl.href, responsePayload);
         return res.json(responsePayload);
       } catch (err) {
-        // Fallback for YouTube
         const fallbackTags = generateSmartTags(parsedUrl.href, 'YouTube Video', '', 'youtube', '');
-        return res.json({
+        const fallbackPayload = {
           success: true,
           type: 'youtube',
           youtubeId,
           title: 'YouTube Video',
-          previewUrl: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
+          previewUrl: fallbackPreview,
           embedUrl: `https://www.youtube.com/embed/${youtubeId}?autoplay=1`,
           suggestedTags: fallbackTags,
           suggestedFolderType: 'youtube',
           metadata: {}
-        });
+        };
+        cacheMetadata(parsedUrl.href, fallbackPayload);
+        return res.json(fallbackPayload);
       }
     }
 
-    // Standard Website OpenGraph extraction
+    // 4. Ultra-Fast Streamed Website OpenGraph Extraction
+    // Streams only the <head> section (up to ~200KB) and cancels stream immediately
     try {
       const response = await axios.get(parsedUrl.href, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         },
-        timeout: 5000,
-        maxContentLength: 1024 * 1024,
-        maxBodyLength: 1024 * 1024,
-        maxRedirects: 0
+        responseType: 'stream',
+        timeout: 3500,
+        maxRedirects: 5
       });
 
-      const $ = cheerio.load(response.data);
+      let html = '';
+      await new Promise((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (!finished) {
+            finished = true;
+            try { response.data.destroy(); } catch (e) {}
+            resolve();
+          }
+        };
+
+        response.data.on('data', (chunk) => {
+          html += chunk.toString('utf8');
+          if (html.includes('</head>') || html.length >= 250000) {
+            finish();
+          }
+        });
+
+        response.data.on('end', finish);
+        response.data.on('close', finish);
+        response.data.on('error', finish);
+      });
+
+      const $ = cheerio.load(html);
       const title = $('meta[property="og:title"]').attr('content') ||
                     $('title').text() ||
                     $('meta[name="twitter:title"]').attr('content') ||
-                    parsedUrl.href;
+                    parsedUrl.hostname;
 
       const description = $('meta[property="og:description"]').attr('content') ||
                           $('meta[name="description"]').attr('content') ||
@@ -270,12 +314,13 @@ exports.extractMetadata = async (req, res) => {
         suggestedFolderType,
         metadata: { siteName, description: cleanDesc, smartSummary }
       };
+
       cacheMetadata(parsedUrl.href, responsePayload);
       return res.json(responsePayload);
     } catch (err) {
       const hostname = parsedUrl.hostname;
       const fallbackTags = generateSmartTags(parsedUrl.href, hostname, '', 'link');
-      return res.json({
+      const fallbackPayload = {
         success: true,
         type: 'link',
         title: hostname,
@@ -285,7 +330,9 @@ exports.extractMetadata = async (req, res) => {
         suggestedTags: fallbackTags,
         suggestedFolderType: 'web',
         metadata: { siteName: hostname }
-      });
+      };
+      cacheMetadata(parsedUrl.href, fallbackPayload);
+      return res.json(fallbackPayload);
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
