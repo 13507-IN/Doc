@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Play, ExternalLink, Copy, Check, Star, Pin, Pencil, Trash2,
-  Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock, Globe
+  Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock, Globe, Folder
 } from 'lucide-react';
 import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 
