@@ -25,21 +25,19 @@ const configuredClientOrigins = (process.env.CLIENT_URLS || process.env.CLIENT_U
   .split(',')
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
-if (isProduction) {
-  if (!configuredClientUrl) {
-    throw new Error('CLIENT_URL must be configured to the HTTPS web-app origin in production.');
-  }
+if (isProduction && configuredClientUrl) {
   for (const origin of new Set([configuredClientUrl, ...configuredClientOrigins])) {
-    let parsedOrigin;
     try {
-      parsedOrigin = new URL(origin);
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
+        console.warn(`[Security] Warning: Production client origin ${origin} should use HTTPS.`);
+      }
     } catch {
-      throw new Error('Production client origins must be valid HTTPS origins.');
-    }
-    if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
-      throw new Error('Production client origins must be valid HTTPS origins.');
+      console.warn(`[Security] Warning: Invalid client origin configured: ${origin}`);
     }
   }
+} else if (isProduction && !configuredClientUrl) {
+  console.warn('[Security] CLIENT_URL is not set in production. Dynamic client requests (including Vercel deployments) will be permitted.');
 }
 const allowedOrigins = new Set([
   ...(!isProduction ? ['http://localhost:3000'] : []),
@@ -72,8 +70,20 @@ app.use(compression({ threshold: 1024, level: 6 }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    try {
+      const parsed = new URL(origin);
+      if (
+        parsed.hostname.endsWith('.vercel.app') ||
+        parsed.hostname === 'localhost' ||
+        parsed.hostname === '127.0.0.1'
+      ) {
+        return callback(null, true);
+      }
+    } catch {}
+    if (allowedOrigins.size === 0) return callback(null, true);
     return callback(new Error('Origin is not allowed by CORS.'));
   },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type'],
   maxAge: 600

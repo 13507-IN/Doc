@@ -32,6 +32,7 @@ const userActionRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
   keyGenerator: (req) => req.user?.id || req.ip,
+  validate: { ip: false },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, message: 'Too many uploads. Try again later.' }
@@ -41,6 +42,7 @@ const assistantRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
   keyGenerator: (req) => req.user?.id || req.ip,
+  validate: { ip: false },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, message: 'Too many assistant requests. Try again in 15 minutes.' }
