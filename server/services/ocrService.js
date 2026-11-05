@@ -2,6 +2,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
 const Item = require('../models/Item');
+const { isVisionHtrAvailable, transcribeImageWithVision } = require('./visionHtrService');
 
 let workerPromise = null;
 let queue = Promise.resolve();
@@ -242,30 +243,114 @@ async function initWorker() {
   }
 }
 
-async function recognize(buffer) {
+function shouldTriggerVisionHtr({ text, confidence, width, height }) {
+  // 1. Tesseract confidence below threshold (e.g. < 60%)
+  if (confidence > 0 && confidence < 60) return true;
+
+  // 2. Large canvas / visual area but very sparse text (< 25 chars)
+  if (width >= 400 && height >= 300 && text.length < 25) return true;
+
+  // 3. High noise / low valid word ratio (e.g. whiteboard lecture symbols & cursive)
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 10) {
+    const validWords = tokens.filter((t) => /^[a-zA-Z0-9]{3,}$/.test(t.replace(/[^a-zA-Z0-9]/g, '')));
+    const validRatio = validWords.length / tokens.length;
+    if (validRatio < 0.35 && confidence < 75) return true;
+  }
+
+  return false;
+}
+
+// Wrapper that behaves as a string (via toString() / valueOf()) while carrying structured metadata
+function createOcrResult(text, engine = 'tesseract', confidence = 0, model = '') {
+  const norm = normalizedText(text);
+  const obj = new String(norm);
+  obj.text = norm;
+  obj.engine = engine;
+  obj.confidence = confidence;
+  obj.model = model;
+  return obj;
+}
+
+async function recognize(buffer, options = {}) {
+  // If explicitly requested to run Vision HTR directly
+  if (options.forceVision && isVisionHtrAvailable()) {
+    try {
+      const visionResult = await transcribeImageWithVision(buffer, options.mimeType);
+      if (visionResult?.text) {
+        return createOcrResult(visionResult.text, visionResult.provider || 'vision-htr', 95, visionResult.model);
+      }
+    } catch (err) {
+      console.warn('[OCR] Forced Vision HTR attempt failed, falling back to local OCR:', err.message);
+    }
+  }
+
+  // Pass 1: Fast local Tesseract OCR (Zero cost, <1.5s)
   const [worker, preprocessed] = await Promise.all([
     getWorker(),
     preprocessImage(buffer)
   ]);
   const { data } = await worker.recognize(preprocessed);
   scheduleRelease();
-  return normalizedText(data?.text);
+
+  const localText = normalizedText(data?.text);
+  const confidence = Number(data?.confidence) || 0;
+
+  // Pass 2: Automatic Low-Confidence & Handwriting Fallback Trigger
+  if (isVisionHtrAvailable() && !options.skipFallback) {
+    let width = 0;
+    let height = 0;
+    try {
+      const meta = await sharp(buffer).metadata();
+      width = meta.width || 0;
+      height = meta.height || 0;
+    } catch {}
+
+    const needsVision = shouldTriggerVisionHtr({
+      text: localText,
+      confidence,
+      width,
+      height
+    });
+
+    if (needsVision) {
+      console.log(`[OCR] Low confidence (${confidence.toFixed(1)}%) or handwriting detected. Triggering Vision HTR fallback...`);
+      try {
+        const visionResult = await transcribeImageWithVision(buffer, options.mimeType);
+        if (visionResult?.text && visionResult.text.length > 10) {
+          console.log(`[OCR] Vision HTR fallback succeeded via ${visionResult.provider} (${visionResult.model}).`);
+          return createOcrResult(visionResult.text, visionResult.provider || 'vision-htr', 95, visionResult.model);
+        }
+      } catch (visionErr) {
+        console.warn('[OCR] Vision HTR fallback failed; preserving local OCR text:', visionErr.message);
+      }
+    }
+  }
+
+  return createOcrResult(localText, 'tesseract', confidence);
 }
 
-function enqueueItemOcr(itemId, buffer) {
+function enqueueItemOcr(itemId, buffer, options = {}) {
   queue = queue
     .catch(() => {})
     .then(async () => {
       await Item.findByIdAndUpdate(itemId, { ocrStatus: 'processing', ocrError: '' });
       try {
-        const ocrText = await recognize(buffer);
+        const ocrResult = await recognize(buffer, options);
+        const ocrText = String(ocrResult?.text || ocrResult || '').trim();
         const detectedUrls = extractUrlsFromText(ocrText);
 
         const updateData = {
           ocrText,
           ocrStatus: 'done',
-          ocrError: ''
+          ocrError: '',
+          'metadata.ocrEngine': ocrResult?.engine || 'tesseract',
+          'metadata.ocrConfidence': ocrResult?.confidence || 0
         };
+
+        if (ocrResult?.model) {
+          updateData['metadata.ocrModel'] = ocrResult.model;
+        }
 
         if (detectedUrls.length > 0) {
           updateData['metadata.detectedUrls'] = detectedUrls;
@@ -290,4 +375,10 @@ function enqueueItemOcr(itemId, buffer) {
   return queue;
 }
 
-module.exports = { enqueueItemOcr, recognize, extractUrlsFromText, initWorker };
+module.exports = {
+  enqueueItemOcr,
+  recognize,
+  extractUrlsFromText,
+  initWorker,
+  shouldTriggerVisionHtr
+};

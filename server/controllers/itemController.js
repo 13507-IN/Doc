@@ -1,22 +1,32 @@
 const Item = require('../models/Item');
 const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
-const { enqueueItemOcr, recognize } = require('../services/ocrService');
+const { enqueueItemOcr, recognize, extractUrlsFromText } = require('../services/ocrService');
+const { isVisionHtrAvailable, transcribeImageWithVision } = require('../services/visionHtrService');
 const { invalidateAssistantCache } = require('./assistantController');
+const PendingUpload = require('../models/PendingUpload');
+const axios = require('axios');
+const { serializeItem } = require('../services/itemSerializer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o700 });
+try {
+  fs.chmodSync(uploadsDir, 0o700);
+  for (const entry of fs.readdirSync(uploadsDir, { withFileTypes: true })) {
+    if (entry.isFile()) fs.chmodSync(path.join(uploadsDir, entry.name), 0o600);
+  }
+} catch (error) {
+  console.warn('[Uploads] Could not apply private filesystem permissions:', error.message);
 }
 
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
 
 async function storeImage(req) {
-  let imageUrl = '';
   let cloudinaryPublicId = null;
+  let cloudinaryFormat = '';
   let localFilename = null;
   let storage = 'local';
 
@@ -27,6 +37,7 @@ async function storeImage(req) {
           {
             folder: `holder/${req.user.id}`,
             resource_type: 'image',
+            type: 'authenticated',
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
             transformation: [{ width: 2400, height: 2400, crop: 'limit' }]
           },
@@ -34,26 +45,24 @@ async function storeImage(req) {
         );
         stream.end(req.file.buffer);
       });
-      imageUrl = result.secure_url;
       cloudinaryPublicId = result.public_id;
+      cloudinaryFormat = result.format || '';
       storage = 'cloudinary';
     } catch (error) {
       console.error('[Cloudinary] Image upload failed; falling back to local storage:', error.message);
     }
   }
 
-  if (!imageUrl) {
+  if (!cloudinaryPublicId) {
     const ext = path.extname(req.file.originalname) || '.png';
     const cleanBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 40) || 'img';
     localFilename = `img-${cleanBase}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-    await fs.promises.writeFile(path.join(uploadsDir, localFilename), req.file.buffer);
-    const baseUrl = (process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    imageUrl = `${baseUrl}/uploads/${localFilename}`;
+    await fs.promises.writeFile(path.join(uploadsDir, localFilename), req.file.buffer, { mode: 0o600 });
   }
 
   return {
-    imageUrl,
     cloudinaryPublicId,
+    cloudinaryFormat,
     localFilename,
     storage,
     storageWarning: storage === 'local'
@@ -61,6 +70,173 @@ async function storeImage(req) {
       : ''
   };
 }
+
+function mediaFields(stored, file) {
+  return {
+    mediaStorage: stored.storage,
+    mediaMimeType: file.mimetype,
+    cloudinaryPublicId: stored.cloudinaryPublicId,
+    cloudinaryType: stored.cloudinaryPublicId ? 'authenticated' : null,
+    cloudinaryResourceType: stored.cloudinaryPublicId ? 'image' : null,
+    cloudinaryFormat: stored.cloudinaryFormat || '',
+    localFilename: stored.localFilename
+  };
+}
+
+function clientSafeMetadata(metadata = {}) {
+  const safe = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? { ...metadata }
+    : {};
+  for (const key of [
+    'cloudinaryPublicId',
+    'cloudinaryType',
+    'cloudinaryResourceType',
+    'cloudinaryFormat',
+    'localFilename',
+    'mediaStorage',
+    'mediaMimeType',
+    'uploadId'
+  ]) {
+    delete safe[key];
+  }
+  return safe;
+}
+
+async function createPendingUpload(userId, file, stored, resourceType) {
+  const pending = await PendingUpload.create({
+    userId,
+    storage: stored.storage,
+    localFilename: stored.localFilename || null,
+    cloudinaryPublicId: stored.cloudinaryPublicId || null,
+    cloudinaryResourceType: resourceType,
+    cloudinaryFormat: stored.cloudinaryFormat || '',
+    mimeType: file.mimetype,
+    filename: file.originalname || (resourceType === 'raw' ? 'document.pdf' : 'image'),
+    size: file.size,
+    expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000)
+  });
+  return pending;
+}
+
+async function deletePendingUploadById(uploadId, userId) {
+  if (!/^[a-f\d]{24}$/i.test(String(uploadId || ''))) return false;
+  const pending = await PendingUpload.findOneAndDelete({ _id: uploadId, userId });
+  if (!pending) return false;
+  await discardStoredMedia(pending);
+  return true;
+}
+
+function setPrivateMediaHeaders(res, mimeType, filename) {
+  const safeName = String(filename || 'file')
+    .replace(/[\r\n"]/g, '_')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .slice(0, 150) || 'file';
+  res.set({
+    'Content-Type': mimeType,
+    'Content-Disposition': `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(filename || 'file')}`,
+    'Cache-Control': 'private, no-store, max-age=0',
+    Pragma: 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+    'Cross-Origin-Resource-Policy': 'cross-origin'
+  });
+}
+
+async function streamStoredMedia(res, media, resourceType, fallbackMimeType) {
+  const mimeType = media.mediaMimeType || media.mimeType || fallbackMimeType;
+  const filename = media.filename || media.originalFilename || 'file';
+
+  setPrivateMediaHeaders(res, mimeType, filename);
+
+  if (media.localFilename) {
+    if (path.basename(media.localFilename) !== media.localFilename) {
+      return res.status(404).end();
+    }
+    const filePath = path.join(uploadsDir, media.localFilename);
+    try {
+      await fs.promises.access(filePath, fs.constants.R_OK);
+    } catch {
+      return res.status(404).end();
+    }
+    return fs.createReadStream(filePath)
+      .on('error', () => {
+        if (!res.headersSent) res.status(404);
+        res.end();
+      })
+      .pipe(res);
+  }
+
+  if (!media.cloudinaryPublicId || !cloudinaryConfigured) {
+    return res.status(404).end();
+  }
+
+  let downloadUrl;
+  const deliveryType = media.cloudinaryType || 'upload';
+  if (deliveryType === 'authenticated' || deliveryType === 'private') {
+    const format = media.cloudinaryFormat || (resourceType === 'raw' ? 'pdf' : undefined);
+    downloadUrl = cloudinary.utils.private_download_url(
+      media.cloudinaryPublicId,
+      format,
+      {
+        resource_type: resourceType,
+        type: deliveryType,
+        expires_at: Math.floor(Date.now() / 1000) + 60
+      }
+    );
+  } else {
+    // Legacy public assets are proxied without exposing their Cloudinary URL.
+    // Run the migration command to change their delivery type to authenticated.
+    downloadUrl = cloudinary.url(media.cloudinaryPublicId, {
+      secure: true,
+      resource_type: resourceType,
+      type: 'upload',
+      format: media.cloudinaryFormat || undefined
+    });
+  }
+
+  try {
+    const response = await axios.get(downloadUrl, {
+      responseType: 'stream',
+      timeout: 20000,
+      maxRedirects: 3
+    });
+    return response.data
+      .on('error', () => {
+        if (!res.headersSent) res.status(502);
+        res.end();
+      })
+      .pipe(res);
+  } catch (error) {
+    console.error('[Media] Private asset retrieval failed:', error.message);
+    if (!res.headersSent) res.status(502).end();
+    return undefined;
+  }
+}
+
+async function discardStoredMedia(media = {}) {
+  if (media.cloudinaryPublicId && cloudinaryConfigured) {
+    const resourceType = media.cloudinaryResourceType || 'image';
+    const type = media.cloudinaryType || 'upload';
+    await cloudinary.uploader.destroy(media.cloudinaryPublicId, {
+      resource_type: resourceType,
+      type,
+      invalidate: true
+    }).catch((error) => {
+      console.warn('[Cloudinary] Unable to remove stored media:', error.message);
+    });
+  }
+  if (media.localFilename && path.basename(media.localFilename) === media.localFilename) {
+    await fs.promises.unlink(path.join(uploadsDir, media.localFilename)).catch(() => {});
+  }
+}
+
+exports.cleanupExpiredUploads = async () => {
+  const expired = await PendingUpload.find({ expiresAt: { $lte: new Date() } }).limit(100).lean();
+  for (const upload of expired) {
+    await discardStoredMedia(upload);
+    await PendingUpload.deleteOne({ _id: upload._id });
+  }
+  return expired.length;
+};
 
 function decodeCursor(cursor) {
   try {
@@ -144,7 +320,7 @@ exports.getItems = async (req, res) => {
     res.json({
       success: true,
       count: pageItems.length,
-      items: pageItems,
+      items: pageItems.map(serializeItem),
       page: {
         hasMore,
         nextCursor: hasMore ? encodeCursor(pageItems.at(-1)) : null
@@ -163,27 +339,103 @@ exports.getItemById = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    res.json({ success: true, item });
+    res.json({ success: true, item: serializeItem(item) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+exports.getItemMedia = async (req, res) => {
+  try {
+    const item = await Item.findOne({ _id: req.params.id, userId: req.user.id })
+      .select('type metadata');
+    if (!item) return res.status(404).end();
+
+    const metadata = item.metadata || {};
+    const resourceType = metadata.cloudinaryResourceType ||
+      (item.type === 'pdf' || item.type === 'document' ? 'raw' : 'image');
+    const fallbackMimeType = resourceType === 'raw' ? 'application/pdf' : 'application/octet-stream';
+    if (!metadata.localFilename && !metadata.cloudinaryPublicId) {
+      return res.status(404).end();
+    }
+    return await streamStoredMedia(res, {
+      ...metadata,
+      filename: metadata.filename || (resourceType === 'raw' ? 'document.pdf' : 'image')
+    }, resourceType, fallbackMimeType);
+  } catch (error) {
+    if (error.name === 'CastError') return res.status(404).end();
+    console.error('[Media] Item media request failed:', error.message);
+    return res.status(500).end();
+  }
+};
+
+exports.getPendingUploadMedia = async (req, res) => {
+  try {
+    const pending = await PendingUpload.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+      expiresAt: { $gt: new Date() }
+    }).lean();
+    if (!pending) return res.status(404).end();
+    return await streamStoredMedia(
+      res,
+      pending,
+      pending.cloudinaryResourceType,
+      pending.mimeType
+    );
+  } catch (error) {
+    if (error.name === 'CastError') return res.status(404).end();
+    console.error('[Media] Pending upload preview failed:', error.message);
+    return res.status(500).end();
+  }
+};
+
+exports.deletePendingUpload = async (req, res) => {
+  try {
+    const deleted = await deletePendingUploadById(req.params.id, req.user.id);
+    if (!deleted) return res.status(404).json({ success: false, message: 'Upload not found.' });
+    return res.status(204).end();
+  } catch (error) {
+    console.error('[Uploads] Pending upload cleanup failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not remove the staged upload.' });
+  }
+};
+
 // Create a new item scoped to user
 exports.createItem = async (req, res) => {
+  let consumedUpload = null;
   try {
     const userId = req.user.id;
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
     const {
       title, type, folderId, url, content, previewUrl, ocrText, tags, metadata,
-      isFavorite, isPrivate, pinned, expiresAt, reminderDays
-    } = req.body;
+      isFavorite, isPrivate, pinned, expiresAt, reminderDays, uploadId
+    } = body;
 
     if (!title || !type) {
       return res.status(400).json({ success: false, message: 'Title and type are required' });
     }
 
+    const uploadedResourceType = type === 'pdf' || type === 'document' ? 'raw' : 'image';
+    let pendingUpload = null;
+    if (uploadId) {
+      if (!/^[a-f\d]{24}$/i.test(String(uploadId))) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is invalid or expired. Upload it again.' });
+      }
+      pendingUpload = await PendingUpload.findOneAndDelete({
+        _id: uploadId,
+        userId,
+        cloudinaryResourceType: uploadedResourceType,
+        expiresAt: { $gt: new Date() }
+      });
+      if (!pendingUpload) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is invalid or expired. Upload it again.' });
+      }
+      consumedUpload = pendingUpload;
+    }
+
     // Check for existing duplicate URL for this user (unless allowDuplicate is explicitly true)
-    if (url && url.trim() && !req.body.allowDuplicate) {
+    if (url && url.trim() && !pendingUpload && !body.allowDuplicate) {
       const normalizedUrl = url.trim().replace(/\/$/, '');
       const existing = await Item.findOne({ 
         userId, 
@@ -197,7 +449,7 @@ exports.createItem = async (req, res) => {
           success: false,
           isDuplicate: true,
           message: `Already in your vault in "${folderName}" (saved on ${savedDate})`,
-          existingItem: existing
+          existingItem: serializeItem(existing)
         });
       }
     }
@@ -206,17 +458,51 @@ exports.createItem = async (req, res) => {
       ? tags.map(t => t.trim()).filter(Boolean)
       : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
 
+    const cleanMetadata = clientSafeMetadata(metadata);
+    if (pendingUpload) {
+      Object.assign(cleanMetadata, {
+        filename: pendingUpload.filename,
+        size: pendingUpload.size,
+        mediaStorage: pendingUpload.storage,
+        mediaMimeType: pendingUpload.mimeType,
+        cloudinaryPublicId: pendingUpload.cloudinaryPublicId,
+        cloudinaryType: pendingUpload.cloudinaryPublicId ? 'authenticated' : null,
+        cloudinaryResourceType: pendingUpload.cloudinaryResourceType,
+        cloudinaryFormat: pendingUpload.cloudinaryFormat || '',
+        localFilename: pendingUpload.localFilename
+      });
+    }
+    const storedFields = pendingUpload
+      ? {
+          mediaStorage: pendingUpload.storage,
+          mediaMimeType: pendingUpload.mimeType,
+          cloudinaryPublicId: pendingUpload.cloudinaryPublicId,
+          cloudinaryType: pendingUpload.cloudinaryPublicId ? 'authenticated' : null,
+          cloudinaryResourceType: pendingUpload.cloudinaryResourceType,
+          cloudinaryFormat: pendingUpload.cloudinaryFormat || '',
+          localFilename: pendingUpload.localFilename
+        }
+      : {};
+    const isUploadedPdf = Boolean(pendingUpload && uploadedResourceType === 'raw');
+
     const item = new Item({
       userId,
       title,
       type,
       folderId: folderId || null,
-      url: url || '',
+      url: isUploadedPdf ? '' : (url || ''),
       content: content || '',
       ocrText: ocrText || '',
-      previewUrl: previewUrl || '',
+      previewUrl: pendingUpload ? '' : (previewUrl || ''),
       tags: processedTags,
-      metadata: metadata || {},
+      metadata: {
+        ...cleanMetadata,
+        ...(pendingUpload ? {
+          filename: pendingUpload.filename,
+          size: pendingUpload.size
+        } : {}),
+        ...storedFields
+      },
       isFavorite: Boolean(isFavorite),
       isPrivate: Boolean(isPrivate),
       pinned: Boolean(pinned),
@@ -224,13 +510,22 @@ exports.createItem = async (req, res) => {
       reminderDays: Number.isFinite(Number(reminderDays)) ? Number(reminderDays) : 30
     });
 
-    await item.save();
+    try {
+      await item.save();
+    } catch (error) {
+      throw error;
+    }
+    // Ownership transferred to the saved item; later response/population errors
+    // must never remove media that the item now references.
+    consumedUpload = null;
     invalidateAssistantCache(userId);
     const populatedItem = await Item.findById(item._id).populate('folderId', 'name icon color');
 
-    res.status(201).json({ success: true, item: populatedItem });
+    res.status(201).json({ success: true, item: serializeItem(populatedItem) });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    if (consumedUpload) await discardStoredMedia(consumedUpload);
+    console.error('[Items] Item creation failed:', error.message);
+    res.status(500).json({ success: false, message: 'Could not save this item. Please try again.' });
   }
 };
 
@@ -240,6 +535,10 @@ exports.updateItem = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
     const updateData = { ...req.body };
+    const uploadId = updateData.uploadId;
+    const removeMedia = updateData.removeMedia === true;
+    delete updateData.uploadId;
+    delete updateData.removeMedia;
 
     if (updateData.tags && typeof updateData.tags === 'string') {
       updateData.tags = updateData.tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -250,31 +549,97 @@ exports.updateItem = async (req, res) => {
     }
     updateData.updatedAt = new Date();
 
-    const existingItem = await Item.findOne({ _id: id, userId }).select('metadata');
+    const existingItem = await Item.findOne({ _id: id, userId });
     if (!existingItem) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    const item = await Item.findOneAndUpdate({ _id: id, userId }, updateData, { new: true, runValidators: true })
-      .populate('folderId', 'name icon color');
 
-    const oldPublicId = existingItem.metadata?.cloudinaryPublicId;
-    const newPublicId = item.metadata?.cloudinaryPublicId;
-    if (oldPublicId && oldPublicId !== newPublicId && cloudinaryConfigured) {
-      cloudinary.uploader.destroy(oldPublicId).catch((error) => {
-        console.warn(`Unable to remove replaced Cloudinary asset ${oldPublicId}:`, error.message);
+    const oldMetadata = existingItem.metadata?.toObject
+      ? existingItem.metadata.toObject()
+      : { ...(existingItem.metadata || {}) };
+    const expectedResourceType = (updateData.type || existingItem.type) === 'pdf' ||
+      (updateData.type || existingItem.type) === 'document' ? 'raw' : 'image';
+    let pendingUpload = null;
+
+    if (uploadId) {
+      if (!/^[a-f\d]{24}$/i.test(String(uploadId))) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is invalid or expired. Upload it again.' });
+      }
+      pendingUpload = await PendingUpload.findOneAndDelete({
+        _id: uploadId,
+        userId,
+        cloudinaryResourceType: expectedResourceType,
+        expiresAt: { $gt: new Date() }
       });
+      if (!pendingUpload) {
+        return res.status(400).json({ success: false, message: 'The uploaded file is invalid or expired. Upload it again.' });
+      }
     }
 
-    const oldLocal = existingItem.metadata?.localFilename;
-    const newLocal = item.metadata?.localFilename;
-    if (oldLocal && oldLocal !== newLocal) {
-      fs.promises.unlink(path.join(uploadsDir, oldLocal)).catch(() => {});
+    let nextMetadata = {
+      ...oldMetadata,
+      ...clientSafeMetadata(updateData.metadata)
+    };
+    if (removeMedia || pendingUpload) {
+      for (const key of [
+        'cloudinaryPublicId',
+        'cloudinaryType',
+        'cloudinaryResourceType',
+        'cloudinaryFormat',
+        'localFilename',
+        'mediaStorage',
+        'mediaMimeType'
+      ]) {
+        delete nextMetadata[key];
+      }
+    }
+    if (pendingUpload) {
+      nextMetadata = {
+        ...nextMetadata,
+        filename: pendingUpload.filename,
+        size: pendingUpload.size,
+        mediaStorage: pendingUpload.storage,
+        mediaMimeType: pendingUpload.mimeType,
+        cloudinaryPublicId: pendingUpload.cloudinaryPublicId,
+        cloudinaryType: pendingUpload.cloudinaryPublicId ? 'authenticated' : null,
+        cloudinaryResourceType: pendingUpload.cloudinaryResourceType,
+        cloudinaryFormat: pendingUpload.cloudinaryFormat || '',
+        localFilename: pendingUpload.localFilename
+      };
+      updateData.previewUrl = '';
+      if (expectedResourceType === 'raw') updateData.url = '';
+    }
+    updateData.metadata = nextMetadata;
+
+    const replacedMedia = Boolean(removeMedia || pendingUpload);
+    let item;
+    try {
+      item = await Item.findOneAndUpdate(
+        { _id: id, userId },
+        updateData,
+        { new: true, runValidators: true }
+      );
+    } catch (error) {
+      if (pendingUpload) await discardStoredMedia(pendingUpload);
+      throw error;
+    }
+    if (!item) {
+      if (pendingUpload) await discardStoredMedia(pendingUpload);
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
+
+    // The update committed, so the newly staged file belongs to the item now.
+    pendingUpload = null;
+    if (replacedMedia) {
+      await discardStoredMedia(oldMetadata);
     }
 
     invalidateAssistantCache(userId);
-    res.json({ success: true, item });
+    await item.populate('folderId', 'name icon color');
+    res.json({ success: true, item: serializeItem(item) });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('[Items] Item update failed:', error.message);
+    res.status(500).json({ success: false, message: 'Could not update this item. Please try again.' });
   }
 };
 
@@ -290,7 +655,7 @@ exports.toggleFavorite = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    res.json({ success: true, item });
+    res.json({ success: true, item: serializeItem(item) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -308,7 +673,7 @@ exports.togglePin = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    res.json({ success: true, item });
+    res.json({ success: true, item: serializeItem(item) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -322,17 +687,7 @@ exports.deleteItem = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    const publicId = item.metadata?.cloudinaryPublicId;
-    if (publicId && cloudinaryConfigured) {
-      cloudinary.uploader.destroy(publicId).catch((error) => {
-        console.warn(`Unable to remove Cloudinary asset ${publicId}:`, error.message);
-      });
-    }
-
-    const localFilename = item.metadata?.localFilename;
-    if (localFilename) {
-      fs.promises.unlink(path.join(uploadsDir, localFilename)).catch(() => {});
-    }
+    await discardStoredMedia(item.metadata || {});
     invalidateAssistantCache(userId);
     res.json({ success: true, message: 'Item deleted successfully' });
   } catch (error) {
@@ -342,13 +697,14 @@ exports.deleteItem = async (req, res) => {
 
 // Handle image upload with Cloudinary and local disk fallback (concurrent store + OCR)
 exports.uploadImage = async (req, res) => {
+  let stored;
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No image file uploaded' });
     }
 
     const shouldOcr = req.query.ocr === 'true';
-    const [stored, ocrText] = await Promise.all([
+    const [storedImage, ocrText] = await Promise.all([
       storeImage(req),
       shouldOcr
         ? recognize(req.file.buffer).catch((ocrErr) => {
@@ -357,65 +713,71 @@ exports.uploadImage = async (req, res) => {
           })
         : Promise.resolve('')
     ]);
+    stored = storedImage;
+    const pending = await createPendingUpload(req.user.id, req.file, storedImage, 'image');
 
     res.json({
       success: true,
-      imageUrl: stored.imageUrl,
+      uploadId: pending._id,
+      mediaUrl: `/api/uploads/${pending._id}/media`,
       filename: req.file.originalname,
-      cloudinaryPublicId: stored.cloudinaryPublicId,
-      localFilename: stored.localFilename,
-      storage: stored.storage,
-      storageWarning: stored.storageWarning,
+      storage: storedImage.storage,
+      storageWarning: storedImage.storageWarning,
       ocrText,
       ocrStatus: ocrText ? 'done' : 'none'
     });
   } catch (error) {
+    if (stored) await discardStoredMedia({ ...stored, cloudinaryResourceType: 'image' });
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // Save a screenshot immediately, then read its text in the background.
 exports.createScreenshot = async (req, res) => {
+  let stored;
+  let itemCreated = false;
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No screenshot uploaded' });
     }
 
-    const stored = await storeImage(req);
-    const userTags = String(req.body.tags || '')
+    stored = await storeImage(req);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const userTags = String(body.tags || '')
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean);
 
-    const rawFolderId = req.body.folderId;
+    const rawFolderId = body.folderId;
     const cleanFolderId = (rawFolderId && rawFolderId !== 'null' && rawFolderId !== 'undefined' && String(rawFolderId).trim() !== '')
       ? rawFolderId
       : null;
 
     const item = await Item.create({
       userId: req.user.id,
-      title: String(req.body.title || `Screenshot — ${new Date().toLocaleString()}`).slice(0, 200),
+      title: String(body.title || `Screenshot — ${new Date().toLocaleString()}`).slice(0, 200),
       type: 'image',
       folderId: cleanFolderId,
-      url: req.body.url || '',
-      content: req.body.content || '',
-      previewUrl: stored.imageUrl,
+      url: body.url || '',
+      content: body.content || '',
+      previewUrl: '',
       tags: [...new Set(['screenshot', 'quick-clip', ...userTags])],
       metadata: {
-        ...(req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {}),
-        cloudinaryPublicId: stored.cloudinaryPublicId,
-        localFilename: stored.localFilename,
+        ...clientSafeMetadata(body.metadata),
         size: req.file.size,
-        mimeType: req.file.mimetype
+        mimeType: req.file.mimetype,
+        filename: req.file.originalname || 'screenshot',
+        ...mediaFields(stored, req.file)
       },
       ocrStatus: 'pending'
     });
+    itemCreated = true;
 
     invalidateAssistantCache(req.user.id);
 
     res.status(201).json({
       success: true,
-      item,
+      item: serializeItem(item),
       storage: stored.storage,
       storageWarning: stored.storageWarning,
       message: 'Screenshot saved. Text is being read in the background.'
@@ -423,15 +785,22 @@ exports.createScreenshot = async (req, res) => {
 
     enqueueItemOcr(item._id, req.file.buffer);
   } catch (error) {
+    if (stored && !itemCreated) {
+      await discardStoredMedia({ ...stored, cloudinaryResourceType: 'image' });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // Handle PDF document upload
 exports.uploadPdf = async (req, res) => {
+  let stored;
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No PDF file uploaded' });
+    }
+    if (req.file.buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      return res.status(400).json({ success: false, message: 'The uploaded file is not a valid PDF.' });
     }
 
     const originalName = req.file.originalname || 'document.pdf';
@@ -441,16 +810,16 @@ exports.uploadPdf = async (req, res) => {
     const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
     const safeFilename = cleanBaseName + '-' + uniqueSuffix + '.pdf';
 
-    let pdfUrl = '';
+    stored = {
+      cloudinaryPublicId: null,
+      cloudinaryFormat: 'pdf',
+      localFilename: safeFilename,
+      storage: 'local'
+    };
     let storageType = 'local';
-    let cloudinaryPublicId = null;
 
-    // Save to local uploads directory (dependable and fast)
+    // Keep the local copy only if Cloudinary is unavailable.
     const localFilePath = path.join(uploadsDir, safeFilename);
-    await fs.promises.writeFile(localFilePath, req.file.buffer);
-
-    const baseUrl = (process.env.SERVER_URL || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
-    pdfUrl = baseUrl + '/uploads/' + safeFilename;
 
     if (cloudinaryConfigured) {
       try {
@@ -459,33 +828,44 @@ exports.uploadPdf = async (req, res) => {
             {
               folder: `holder/${req.user.id}/pdfs`,
               resource_type: 'raw',
-              public_id: cleanBaseName + '-' + uniqueSuffix,
-              format: 'pdf'
+              type: 'authenticated',
+              public_id: `${cleanBaseName}-${uniqueSuffix}.pdf`
             },
             (error, result) => (error ? reject(error) : resolve(result))
           );
           stream.end(req.file.buffer);
         });
-        if (uploadResult && uploadResult.secure_url) {
-          pdfUrl = uploadResult.secure_url;
+        if (uploadResult && uploadResult.public_id) {
           storageType = 'cloudinary';
-          cloudinaryPublicId = uploadResult.public_id;
+          stored = {
+            cloudinaryPublicId: uploadResult.public_id,
+            cloudinaryFormat: uploadResult.format || 'pdf',
+            localFilename: null,
+            storage: 'cloudinary'
+          };
         }
       } catch (cloudErr) {
         console.error('[Cloudinary] PDF upload failed; using local storage:', cloudErr.message);
       }
     }
 
+    if (storageType === 'cloudinary') {
+      await fs.promises.unlink(localFilePath).catch(() => {});
+    } else {
+      await fs.promises.writeFile(localFilePath, req.file.buffer, { mode: 0o600 });
+    }
+
+    const pending = await createPendingUpload(req.user.id, req.file, stored, 'raw');
     res.json({
       success: true,
-      pdfUrl,
+      uploadId: pending._id,
+      mediaUrl: `/api/uploads/${pending._id}/media`,
       filename: originalName,
       size: req.file.size,
-      storageType,
-      localFilename: storageType === 'local' ? safeFilename : null,
-      cloudinaryPublicId
+      storageType
     });
   } catch (error) {
+    if (stored) await discardStoredMedia({ ...stored, cloudinaryResourceType: 'raw' });
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -569,5 +949,82 @@ exports.seedDemoItems = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+async function getItemImageBuffer(item) {
+  if (item.metadata?.localFilename) {
+    const filePath = path.join(uploadsDir, item.metadata.localFilename);
+    return await fs.promises.readFile(filePath);
+  }
+  if (item.metadata?.cloudinaryPublicId && cloudinaryConfigured) {
+    const downloadUrl = cloudinary.utils.private_download_url(
+      item.metadata.cloudinaryPublicId,
+      item.metadata.cloudinaryFormat || undefined,
+      {
+        resource_type: 'image',
+        type: item.metadata.cloudinaryType || 'authenticated',
+        expires_at: Math.floor(Date.now() / 1000) + 120
+      }
+    );
+    const resp = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 20000 });
+    return Buffer.from(resp.data);
+  }
+  if (item.url && /^https?:\/\//i.test(item.url)) {
+    const resp = await axios.get(item.url, { responseType: 'arraybuffer', timeout: 20000 });
+    return Buffer.from(resp.data);
+  }
+  throw new Error('Image asset data not found on disk or storage.');
+}
+
+// Manually or automatically transcribe an item using Vision HTR
+exports.transcribeItemVision = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await Item.findOne({ _id: id, userId: req.user.id });
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
+
+    if (!isVisionHtrAvailable()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vision AI is not configured. Please add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in server/.env'
+      });
+    }
+
+    const buffer = await getItemImageBuffer(item);
+    const mimeType = item.metadata?.mimeType || 'image/jpeg';
+
+    const result = await transcribeImageWithVision(buffer, mimeType);
+    const text = String(result?.text || '').trim();
+    const detectedUrls = extractUrlsFromText(text);
+
+    item.ocrText = text;
+    item.ocrStatus = 'done';
+    item.ocrError = '';
+    if (!item.metadata) item.metadata = {};
+    item.metadata.ocrEngine = result.provider || 'vision-htr';
+    item.metadata.ocrModel = result.model || '';
+    if (detectedUrls.length > 0) {
+      item.metadata.detectedUrls = detectedUrls;
+      if (!item.url || item.url.includes('cloudinary') || item.url.includes('/uploads/')) {
+        item.url = detectedUrls[0];
+      }
+    }
+    item.markModified('metadata');
+    await item.save();
+
+    invalidateAssistantCache(req.user.id);
+    const populated = await Item.findById(item._id).populate('folderId', 'name icon color');
+    res.json({
+      success: true,
+      item: serializeItem(populated),
+      provider: result.provider,
+      model: result.model
+    });
+  } catch (error) {
+    console.error('[Vision HTR] Manual transcribe failed:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Vision transcription failed' });
   }
 };

@@ -107,7 +107,7 @@ export default function Home() {
         try {
           const parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
-          window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: savedToken, user: parsedUser }, '*');
+          window.postMessage({ type: 'HOLDER_AUTH_CHANGED' }, window.location.origin);
 
           // If coming from Google OAuth callback redirect, show install popup
           const justLoggedIn = sessionStorage.getItem('holder_just_logged_in');
@@ -138,7 +138,7 @@ export default function Home() {
     localStorage.setItem('holder_token', newToken);
     localStorage.setItem('holder_user', JSON.stringify(newUser));
     if (typeof window !== 'undefined') {
-      window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: newToken, user: newUser }, '*');
+      window.postMessage({ type: 'HOLDER_AUTH_CHANGED' }, window.location.origin);
     }
     setIsAuthOpen(false);
 
@@ -159,7 +159,7 @@ export default function Home() {
     localStorage.removeItem('holder_token');
     localStorage.removeItem('holder_user');
     if (typeof window !== 'undefined') {
-      window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: null, user: null }, '*');
+      window.postMessage({ type: 'HOLDER_AUTH_CHANGED' }, window.location.origin);
     }
     setItems([]);
     setFolders([]);
@@ -699,6 +699,11 @@ export default function Home() {
       <ImageModal 
         item={activeImageItem}
         onClose={() => setActiveImageItem(null)}
+        token={token}
+        onItemUpdated={(updatedItem) => {
+          setActiveImageItem(updatedItem);
+          setItems(prev => prev.map(it => it._id === updatedItem._id ? updatedItem : it));
+        }}
       />
 
       <PdfModal 
