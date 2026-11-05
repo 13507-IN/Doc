@@ -12,7 +12,15 @@ const IDLE_RELEASE_MS = 15 * 60 * 1000; // Keep warm for 15 minutes
 const MAX_OCR_CHARS = 20000;
 
 const COMMON_TLDS = '(?:com|org|net|io|ai|dev|app|edu|gov|co|in|me|info|tv|xyz|so|sh|cc)';
-const HIGH_CONFIDENCE_TLDS = '(?:com|org|net|io|ai|dev|app|edu|gov|ong|orn|con|c0m|corn)';
+const EXACT_HIGH_TLDS = '(?:com|org|net|io|ai|dev|app|edu|gov)';
+const FUZZY_DISTORTED_TLDS = '(?:ong|orn|con|c0m|corn)';
+
+const ENGLISH_WORDS_WITH_TLD_SUFFIXES = new Set([
+  'devcon', 'silicon', 'beacon', 'falcon', 'bacon', 'popcorn', 'acorn', 'recon',
+  'icon', 'action', 'section', 'nation', 'station', 'condition', 'dragon', 'wagon',
+  'lemon', 'demon', 'common', 'canon', 'lesson', 'person', 'season', 'reason',
+  'prison', 'poison', 'ribbon', 'button', 'cotton', 'mutton', 'pardon'
+]);
 
 function cleanDomainPart(raw) {
   return String(raw || '')
@@ -58,37 +66,66 @@ function extractUrlsFromText(text) {
     } catch (e) {}
   }
 
-  // 2. Fuzzy Address-Bar Domain Recovery for OCR distortions
-  // Handles:
-  // - "nextjs org", "nextjs,org", "nextjs.org"
-  // - "neriisorgx" -> "nextjs.org" (address bar with close button 'x')
-  // - "rextison" / "rextisong"
-  // - "githuh com"
-  const fuzzyRegex = new RegExp(`(?:^|[\\s|/\\\\>@&€])([a-zA-Z0-9_-]{2,30}?)(?:[\\s,;:.\\-_]|(?=[a-z]{3}))(${HIGH_CONFIDENCE_TLDS})([xX])?\\b(?:\\/([^\\s<>"'{}|\\\\^\`\\[\\]]*))?`, 'gi');
+  // 2. Fuzzy Address-Bar Domain Recovery
+  // Pattern A: True TLDs with or without separator (e.g. "nextjs org", "nextjsorg", "neriisorgx")
+  const fuzzyExactRegex = new RegExp(`(?:^|[\\s|/\\\\>@&€])([a-zA-Z0-9_-]{3,30}?)(?:[\\s,;:.\\-_]|(?=[a-z]{3}))(${EXACT_HIGH_TLDS})([xX])?\\b(?:\\/([^\\s<>"'{}|\\\\^\`\\[\\]]*))?`, 'gi');
   let match;
-  while ((match = fuzzyRegex.exec(text)) !== null) {
+  while ((match = fuzzyExactRegex.exec(text)) !== null) {
     if (isCliCommand(text, match.index)) continue;
+    const fullMatchedWord = (match[1] + match[2]).toLowerCase();
+    if (ENGLISH_WORDS_WITH_TLD_SUFFIXES.has(fullMatchedWord)) continue;
 
     let domain = cleanDomainPart(match[1]);
-    let tld = normalizeTld(match[2]);
+    let tld = match[2].toLowerCase();
     const pathPart = match[4] ? `/${match[4]}` : '';
 
     if (domain.endsWith('-') || domain.startsWith('-')) continue;
-
-    // Ignore noise words
-    if (['and', 'for', 'the', 'with', 'this', 'from', 'have', 'that', 'your', 'about', 'some', 'more', 'copy', 'item', 'create-next'].includes(domain)) {
+    if (['and', 'for', 'the', 'with', 'this', 'from', 'have', 'that', 'your', 'about', 'some', 'more', 'copy', 'item', 'create-next', 'dev'].includes(domain)) {
       continue;
     }
 
-    // Common OCR letter confusions in small address bar fonts:
-    // "neriis", "nextis", "rextis", "rext", "next" -> "nextjs"
     if ((domain.includes('neri') || domain.includes('nextis') || domain.includes('rextis') || domain === 'next') &&
         (lowerText.includes('next') || lowerText.includes('react') || lowerText.includes('framework'))) {
       domain = 'nextjs';
       tld = 'org';
     }
 
-    // "githuh", "githud" -> "github"
+    if (domain === 'githuh' || domain === 'githud') {
+      domain = 'github';
+      tld = 'com';
+    }
+
+    if (domain.length >= 3) {
+      const candidate = `https://${domain}.${tld}${pathPart}`;
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.hostname && parsed.hostname.includes('.')) {
+          urls.add(candidate);
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Pattern B: Distorted TLDs (ong, orn, con, c0m) REQUIRE an explicit separator (e.g. "nextjs ong", "github con")
+  const fuzzyDistortedRegex = new RegExp(`(?:^|[\\s|/\\\\>@&€])([a-zA-Z0-9_-]{3,30})[\\s,;:.\\-_](${FUZZY_DISTORTED_TLDS})([xX])?\\b(?:\\/([^\\s<>"'{}|\\\\^\`\\[\\]]*))?`, 'gi');
+  let dMatch;
+  while ((dMatch = fuzzyDistortedRegex.exec(text)) !== null) {
+    if (isCliCommand(text, dMatch.index)) continue;
+    let domain = cleanDomainPart(dMatch[1]);
+    let tld = normalizeTld(dMatch[2]);
+    const pathPart = dMatch[4] ? `/${dMatch[4]}` : '';
+
+    if (domain.endsWith('-') || domain.startsWith('-')) continue;
+    if (['and', 'for', 'the', 'with', 'this', 'from', 'have', 'that', 'your', 'about', 'some', 'more', 'copy', 'item', 'create-next'].includes(domain)) {
+      continue;
+    }
+
+    if ((domain.includes('neri') || domain.includes('nextis') || domain.includes('rextis') || domain === 'next') &&
+        (lowerText.includes('next') || lowerText.includes('react') || lowerText.includes('framework'))) {
+      domain = 'nextjs';
+      tld = 'org';
+    }
+
     if (domain === 'githuh' || domain === 'githud') {
       domain = 'github';
       tld = 'com';
