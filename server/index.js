@@ -7,31 +7,77 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
+dotenv.config();
+
 const passport = require('passport');
 const session = require('express-session');
+const { getJwtSecret, getSessionSecret } = require('./config/security');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const configurePassport = require('./config/passport');
 const { verifyCloudinary } = require('./config/cloudinary');
 const { initWorker: initOcrWorker } = require('./services/ocrService');
 
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+const configuredClientUrl = (process.env.CLIENT_URL || '').trim().replace(/\/$/, '');
+const configuredClientOrigins = (process.env.CLIENT_URLS || process.env.CLIENT_URL || '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+if (isProduction) {
+  if (!configuredClientUrl) {
+    throw new Error('CLIENT_URL must be configured to the HTTPS web-app origin in production.');
+  }
+  for (const origin of new Set([configuredClientUrl, ...configuredClientOrigins])) {
+    let parsedOrigin;
+    try {
+      parsedOrigin = new URL(origin);
+    } catch {
+      throw new Error('Production client origins must be valid HTTPS origins.');
+    }
+    if (parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
+      throw new Error('Production client origins must be valid HTTPS origins.');
+    }
+  }
+}
+const allowedOrigins = new Set([
+  ...(!isProduction ? ['http://localhost:3000'] : []),
+  ...configuredClientOrigins,
+  ...(configuredClientUrl ? [configuredClientUrl] : []),
+  ...(process.env.EXTENSION_ORIGIN ? [process.env.EXTENSION_ORIGIN.trim()] : [])
+]);
+
+// Validate secrets before the server accepts any requests.
+getJwtSecret();
+const sessionSecret = getSessionSecret();
 
 // Ensure uploads folder exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+  fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o700 });
+}
+try {
+  fs.chmodSync(uploadsDir, 0o700);
+} catch (error) {
+  console.warn('[Uploads] Could not apply private directory permissions:', error.message);
 }
 
 // Middleware
+if (isProduction) app.set('trust proxy', 1);
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  frameguard: false
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 app.use(compression({ threshold: 1024, level: 6 }));
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS.'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type'],
+  maxAge: 600
+}));
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 300,
@@ -40,19 +86,28 @@ app.use(rateLimit({
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-  res.removeHeader('X-Frame-Options');
+app.use('/api', (req, res, next) => {
+  res.set({
+    'Cache-Control': 'private, no-store, max-age=0',
+    Pragma: 'no-cache',
+    'Referrer-Policy': 'no-referrer'
+  });
   next();
-}, express.static(uploadsDir, { maxAge: '7d', immutable: true }));
+});
 
 // Express Session & Passport Middleware
 app.use(
   session({
-    secret: process.env.JWT_SECRET || 'holder_session_secret_13507',
+    name: 'holder.oauth',
+    secret: sessionSecret,
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000
+    }
   })
 );
 app.use(passport.initialize());
@@ -69,7 +124,7 @@ app.use(async (req, res, next) => {
 
   return res.status(503).json({
     success: false,
-    message: 'Database is connecting or unavailable. Please ensure MongoDB Atlas Network Access is set to allow connections (0.0.0.0/0).'
+    message: 'Database is connecting or unavailable. Check the database URI and the database provider’s network-access rules.'
   });
 });
 
@@ -82,7 +137,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     dbState: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    message: 'Holder Personal Assistant API is running' 
+    message: 'Holder Vault Search API is running'
   });
 });
 
@@ -91,10 +146,16 @@ app.use((req, res) => {
 });
 
 app.use((error, req, res, next) => {
+  if (error.message === 'Origin is not allowed by CORS.') {
+    return res.status(403).json({ success: false, message: 'This origin is not allowed.' });
+  }
   console.error('[API] Unhandled error:', error.message);
-  res.status(error.status || 500).json({
+  const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 500
+    ? error.status
+    : 500;
+  res.status(status).json({
     success: false,
-    message: error.status ? error.message : 'Something went wrong. Please try again.'
+    message: status < 500 ? 'The request could not be processed.' : 'Something went wrong. Please try again.'
   });
 });
 
@@ -135,6 +196,16 @@ async function connectDB() {
 connectDB().then(() => {
   verifyCloudinary();
   initOcrWorker().catch(() => {});
+  const { cleanupExpiredUploads } = require('./controllers/itemController');
+  cleanupExpiredUploads().catch((error) => {
+    console.error('[Uploads] Initial pending-upload cleanup failed:', error.message);
+  });
+  const uploadCleanupTimer = setInterval(() => {
+    cleanupExpiredUploads().catch((error) => {
+      console.error('[Uploads] Pending-upload cleanup failed:', error.message);
+    });
+  }, 30 * 60 * 1000);
+  uploadCleanupTimer.unref();
   app.listen(PORT, () => {
     console.log(`[Server] Holder API ready on port http://localhost:${PORT}`);
   });

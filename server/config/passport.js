@@ -91,6 +91,12 @@ module.exports = function configurePassport() {
       async (accessToken, refreshToken, profile, done) => {
         try {
           const email = profile.emails && profile.emails[0] ? profile.emails[0].value.toLowerCase() : '';
+          const emailVerified = profile._json?.email_verified === true ||
+            profile.emails?.[0]?.verified === true;
+          if (!email || !emailVerified) {
+            return done(null, false, { message: 'A verified Google email is required.' });
+          }
+
           const name = profile.displayName || (profile.name ? `${profile.name.givenName} ${profile.name.familyName}` : 'Google User');
           const avatar = profile.photos && profile.photos[0] ? profile.photos[0].value : '';
 
@@ -119,7 +125,7 @@ module.exports = function configurePassport() {
           // 3. Create new user
           user = new User({
             name,
-            email: email || `${profile.id}@google.user`,
+            email,
             googleId: profile.id,
             avatar
           });

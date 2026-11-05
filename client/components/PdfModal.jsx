@@ -1,11 +1,12 @@
 ﻿'use client';
 import React from 'react';
 import { X, ExternalLink, Download, FileText } from 'lucide-react';
+import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
 
 export default function PdfModal({ item, onClose }) {
+  const pdfSource = item?.mediaUrl || item?.url || item?.previewUrl;
+  const pdfUrl = usePrivateMediaUrl(pdfSource);
   if (!item) return null;
-
-  const pdfUrl = item.url || item.previewUrl;
   const fileName = item.metadata?.filename || (item.url ? item.url.split('/').pop().split('?')[0] : 'document.pdf');
   const fileSize = item.metadata?.size
     ? item.metadata.size > 1024 * 1024
@@ -173,7 +174,9 @@ export default function PdfModal({ item, onClose }) {
               color: 'var(--text-muted)'
             }}>
               <FileText size={40} color="#f43f5e" />
-              <p style={{ fontSize: '14px' }}>No valid PDF URL available.</p>
+              <p style={{ fontSize: '14px' }}>
+                {pdfSource ? 'Loading private PDF…' : 'No PDF file is attached.'}
+              </p>
             </div>
           )}
         </div>

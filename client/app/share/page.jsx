@@ -282,6 +282,7 @@ function ShareContent() {
 
     setSaving(true);
     setError('');
+    let pendingUploadId = null;
 
     try {
       // FAST PATH: Direct single-roundtrip screenshot / image save with background OCR
@@ -327,8 +328,9 @@ function ShareContent() {
         });
 
         if (uploadRes.data.success) {
-          finalPreviewUrl = uploadRes.data.pdfUrl;
-          finalUrl = uploadRes.data.pdfUrl;
+          pendingUploadId = uploadRes.data.uploadId;
+          finalPreviewUrl = '';
+          finalUrl = '';
           ocrText = uploadRes.data.extractedText || '';
           finalMetadata = {
             ...finalMetadata,
@@ -350,7 +352,8 @@ function ShareContent() {
         folderId: selectedFolder || null,
         previewUrl: finalPreviewUrl,
         metadata: finalMetadata,
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean)
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+        ...(pendingUploadId ? { uploadId: pendingUploadId } : {})
       };
 
       const res = await axios.post(`${API_BASE}/items`, payload, {
@@ -358,11 +361,17 @@ function ShareContent() {
       });
 
       if (res.data.success) {
+        pendingUploadId = null;
         setSavedSuccess(true);
       } else {
         throw new Error(res.data.message || 'Failed to save item');
       }
     } catch (err) {
+      if (pendingUploadId) {
+        axios.delete(`${API_BASE}/uploads/${pendingUploadId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {});
+      }
       setError(err.response?.data?.message || err.message || 'Error saving to vault');
     } finally {
       setSaving(false);

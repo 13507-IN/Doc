@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Holder — Quick Personal Assistant Saver",
+  "name": "Holder — Quick Vault Saver",
   "version": "1.2.0",
-  "description": "Clip YouTube videos, images, links & notes directly to your Holder Personal Info Vault & Assistant.",
+  "description": "Save YouTube videos, images, links, and notes to your Holder vault.",
   "permissions": [
     "activeTab",
     "storage",

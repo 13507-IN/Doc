@@ -2,13 +2,12 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const dns = require('dns').promises;
 const net = require('net');
+const http = require('http');
+const https = require('https');
 
 const metadataCache = new Map();
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
-const hostnameValidationCache = new Map();
-const HOSTNAME_CACHE_TTL_MS = 60 * 60 * 1000;
-
 function getCachedMetadata(url) {
   const cached = metadataCache.get(url);
   if (!cached || cached.expiresAt < Date.now()) {
@@ -25,30 +24,72 @@ function cacheMetadata(url, value) {
   metadataCache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
+function ipv6ToBigInt(address) {
+  const normalized = address.toLowerCase().split('%')[0];
+  if (normalized.includes('.')) return null;
+
+  const sections = normalized.split('::');
+  if (sections.length > 2) return null;
+  const left = sections[0] ? sections[0].split(':') : [];
+  const right = sections[1] ? sections[1].split(':') : [];
+  const groups = sections.length === 1
+    ? left
+    : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  if (groups.length !== 8 || groups.some((group) => !/^[a-f\d]{1,4}$/i.test(group))) return null;
+
+  return groups.reduce((result, group) => (result << 16n) | BigInt(`0x${group}`), 0n);
+}
+
 function isPrivateAddress(address) {
-  if (net.isIP(address) === 4) {
-    const [a, b] = address.split('.').map(Number);
+  const family = net.isIP(address);
+  if (family === 4) {
+    const value = address.split('.').map(Number)
+      .reduce((result, octet) => ((result << 8) | octet) >>> 0, 0);
+    const inRange = (network, prefix) => {
+      const base = network.split('.').map(Number)
+        .reduce((result, octet) => ((result << 8) | octet) >>> 0, 0);
+      const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+      return ((value & mask) >>> 0) === ((base & mask) >>> 0);
+    };
+    return [
+      ['0.0.0.0', 8],
+      ['10.0.0.0', 8],
+      ['100.64.0.0', 10],
+      ['127.0.0.0', 8],
+      ['169.254.0.0', 16],
+      ['172.16.0.0', 12],
+      ['192.0.0.0', 24],
+      ['192.0.2.0', 24],
+      ['192.88.99.0', 24],
+      ['192.168.0.0', 16],
+      ['198.18.0.0', 15],
+      ['198.51.100.0', 24],
+      ['203.0.113.0', 24],
+      ['224.0.0.0', 4],
+      ['240.0.0.0', 4]
+    ].some(([network, prefix]) => inRange(network, prefix));
+  }
+
+  if (family === 6) {
+    const normalized = address.toLowerCase().split('%')[0];
+    const value = ipv6ToBigInt(normalized);
+    if (value === null) return true;
+    const inRange = (network, prefix) => {
+      const base = ipv6ToBigInt(network);
+      if (base === null) return true;
+      const shift = BigInt(128 - prefix);
+      return (value >> shift) === (base >> shift);
+    };
     return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
+      !inRange('2000::', 3) ||
+      inRange('2001::', 23) ||
+      inRange('2001:db8::', 32) ||
+      inRange('2002::', 16) ||
+      inRange('3fff::', 20)
     );
   }
 
-  if (net.isIP(address) === 6) {
-    const normalized = address.toLowerCase();
-    if (normalized === '::' || normalized === '::1') return true;
-    if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80')) return true;
-    if (normalized.startsWith('::ffff:')) return isPrivateAddress(normalized.slice(7));
-  }
-
-  return false;
+  return true;
 }
 
 async function assertPublicHttpUrl(parsedUrl) {
@@ -56,43 +97,80 @@ async function assertPublicHttpUrl(parsedUrl) {
     throw new Error('Only public HTTP(S) URLs are supported');
   }
 
-  const hostname = parsedUrl.hostname;
+  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')) {
     throw new Error('Local network URLs are not supported');
   }
 
-  // Direct IP address check without DNS roundtrip
-  if (net.isIP(hostname)) {
-    if (isPrivateAddress(hostname)) {
-      throw new Error('Local network URLs are not supported');
-    }
-    return;
-  }
-
-  // Fast cache check
-  const cachedEntry = hostnameValidationCache.get(hostname);
-  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
-    if (!cachedEntry.isValid) {
-      throw new Error('Local network URLs are not supported');
-    }
-    return;
-  }
-
+  const directFamily = net.isIP(hostname);
   try {
-    // Fast standard lookup without IPv6 AAAA timeout stalls
-    const { address } = await dns.lookup(hostname);
-    if (!address || isPrivateAddress(address)) {
-      if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
-      hostnameValidationCache.set(hostname, { isValid: false, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
+    const addresses = directFamily
+      ? [{ address: hostname, family: directFamily }]
+      : await dns.lookup(hostname, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
       throw new Error('Local network URLs are not supported');
     }
-
-    if (hostnameValidationCache.size >= 1000) hostnameValidationCache.delete(hostnameValidationCache.keys().next().value);
-    hostnameValidationCache.set(hostname, { isValid: true, expiresAt: Date.now() + HOSTNAME_CACHE_TTL_MS });
+    return addresses;
   } catch (err) {
-    if (err.message.includes('Local network')) throw err;
-    // If DNS check fails, allow fetch to proceed; axios will handle resolution errors
+    if (err.message === 'Local network URLs are not supported') throw err;
+    throw new Error('The website hostname could not be safely verified');
   }
+}
+
+function createPinnedAgent(parsedUrl, addresses) {
+  const expectedHost = parsedUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const lookup = (hostname, options, callback) => {
+    const actualHost = String(hostname).replace(/^\[|\]$/g, '').toLowerCase();
+    if (actualHost !== expectedHost) {
+      return callback(new Error('Website hostname changed during request'));
+    }
+    if (options?.all) {
+      return callback(null, addresses.map(({ address, family }) => ({ address, family })));
+    }
+    const selected = addresses[0];
+    return callback(null, selected.address, selected.family);
+  };
+  const Agent = parsedUrl.protocol === 'https:' ? https.Agent : http.Agent;
+  return new Agent({ keepAlive: false, maxSockets: 1, lookup });
+}
+
+async function fetchPublicHttpStream(initialUrl, requestOptions) {
+  let currentUrl = new URL(initialUrl.href);
+  for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
+    const addresses = await assertPublicHttpUrl(currentUrl);
+    const agent = createPinnedAgent(currentUrl, addresses);
+    let response;
+    try {
+      response = await axios.get(currentUrl.href, {
+        ...requestOptions,
+        httpAgent: currentUrl.protocol === 'http:' ? agent : undefined,
+        httpsAgent: currentUrl.protocol === 'https:' ? agent : undefined,
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400
+      });
+    } catch (error) {
+      agent.destroy();
+      throw error;
+    }
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.location;
+      response.data?.destroy?.();
+      agent.destroy();
+      if (!location || redirectCount === 5) {
+        throw new Error('The website redirected too many times');
+      }
+      try {
+        currentUrl = new URL(location, currentUrl);
+      } catch {
+        throw new Error('The website returned an invalid redirect');
+      }
+      continue;
+    }
+
+    return { response, agent, finalUrl: currentUrl };
+  }
+  throw new Error('The website redirected too many times');
 }
 
 // Extract YouTube ID from various YouTube URL formats
@@ -151,8 +229,9 @@ function generateSmartSummary(description = '') {
 // Extract rich metadata from a URL (YouTube video, PDF, or website)
 exports.extractMetadata = async (req, res) => {
   try {
-    const { url } = req.body;
-    if (!url) {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const url = body.url;
+    if (typeof url !== 'string' || !url.trim()) {
       return res.status(400).json({ success: false, message: 'URL is required' });
     }
 
@@ -246,14 +325,14 @@ exports.extractMetadata = async (req, res) => {
     // 4. Ultra-Fast Streamed Website OpenGraph Extraction
     // Streams only the <head> section (up to ~200KB) and cancels stream immediately
     try {
-      const response = await axios.get(parsedUrl.href, {
+      const { response, agent } = await fetchPublicHttpStream(parsedUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         },
-        responseType: 'stream',
+      responseType: 'stream',
         timeout: 3500,
-        maxRedirects: 5
+        proxy: false
       });
 
       let html = '';
@@ -263,6 +342,7 @@ exports.extractMetadata = async (req, res) => {
           if (!finished) {
             finished = true;
             try { response.data.destroy(); } catch (e) {}
+            agent.destroy();
             resolve();
           }
         };
@@ -335,6 +415,10 @@ exports.extractMetadata = async (req, res) => {
       return res.json(fallbackPayload);
     }
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('[Metadata] Extraction failed:', error.message);
+    res.status(500).json({ success: false, message: 'Could not retrieve metadata for this URL.' });
   }
 };
+
+exports.isPrivateAddress = isPrivateAddress;
+exports.assertPublicHttpUrl = assertPublicHttpUrl;

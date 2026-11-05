@@ -1,11 +1,39 @@
 'use client';
-import React, { useState } from 'react';
-import { X, Sparkles, Send, ArrowRight, ExternalLink, Image as ImageIcon, Globe, Tv, FileText, Folder, Lock } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { X, Search, Send, ArrowRight, ExternalLink, Image as ImageIcon, Globe, Tv, FileText, Folder, Lock } from 'lucide-react';
 import axios from 'axios';
 import ClickableText from './ClickableText';
 import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
+import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+function AssistantMediaPreview({ item, token }) {
+  const source = item.mediaUrl || item.previewUrl || item.url;
+  const mediaUrl = usePrivateMediaUrl(item.type === 'image' ? source : null, token);
+
+  if (item.type !== 'image') return null;
+  if (!mediaUrl) {
+    return <ImageIcon size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />;
+  }
+
+  return (
+    <a
+      href={mediaUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View image: ${item.title}`}
+      style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={mediaUrl}
+        alt={item.title}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+    </a>
+  );
+}
 
 export default function AIAssistantDrawer({ 
   isOpen, 
@@ -19,20 +47,13 @@ export default function AIAssistantDrawer({
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Hello! I am your Personal Vault Assistant. Ask me anything like: "Get all my YouTube links", "Find the screenshot with my Wi-Fi password", or "What is inside my Brand Assets folder?"'
+      text: 'Ask a question about your saved notes, links, screenshots, or documents. I’ll answer from matching vault records and show the sources.'
     }
   ]);
   const [loading, setLoading] = useState(false);
+  const lastInitialPromptRef = useRef(null);
 
-  // Auto-run initial prompt when triggered by Interactive Guide
-  React.useEffect(() => {
-    if (isOpen && initialPrompt) {
-      handleSend(initialPrompt);
-      if (onQuerySent) onQuerySent();
-    }
-  }, [isOpen, initialPrompt]);
-
-  const handleSend = async (promptText) => {
+  const handleSend = useCallback(async (promptText) => {
     const textToSend = promptText || query;
     if (!textToSend || !textToSend.trim()) return;
 
@@ -61,7 +82,8 @@ export default function AIAssistantDrawer({
           role: 'assistant',
           text: res.data.answer,
           items: res.data.matchedItems || [],
-          targetFolder: res.data.targetFolder
+          targetFolder: res.data.targetFolder,
+          aiNotice: res.data.aiNotice
         };
         setMessages(prev => [...prev, assistantMsg]);
       }
@@ -84,7 +106,19 @@ export default function AIAssistantDrawer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, token]);
+
+  // Auto-run initial prompt when triggered by Interactive Guide
+  React.useEffect(() => {
+    if (!isOpen) {
+      lastInitialPromptRef.current = null;
+      return;
+    }
+    if (!initialPrompt || lastInitialPromptRef.current === initialPrompt) return;
+    lastInitialPromptRef.current = initialPrompt;
+    void handleSend(initialPrompt);
+    if (onQuerySent) onQuerySent();
+  }, [handleSend, initialPrompt, isOpen, onQuerySent]);
 
   if (!isOpen) return null;
 
@@ -128,24 +162,35 @@ export default function AIAssistantDrawer({
               color: '#fff',
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
             }}>
-              <Sparkles size={18} />
+              <Search size={18} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: '#fff' }}>
-                  Holder Assistant
+                  Vault Assistant
                 </h3>
                 <span style={{ fontSize: '10px', color: '#059669', background: 'rgba(5, 150, 105, 0.15)', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
-                  ● Ready
+                  Workers AI
                 </span>
               </div>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>AI Knowledge Retrieval Engine</p>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Grounded answers from your saved items</p>
             </div>
           </div>
 
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
             <X size={20} />
           </button>
+        </div>
+
+        <div style={{
+          padding: '9px 16px',
+          borderBottom: '1px solid var(--border-color)',
+          background: 'var(--bg-primary)',
+          color: 'var(--text-muted)',
+          fontSize: '11px',
+          lineHeight: 1.45
+        }}>
+          Relevant excerpts from non-private items go to Cloudflare Workers AI. Private folders stay local; recognized credential values are redacted. Password and link lookups stay local.
         </div>
 
         {/* Suggested Prompts */}
@@ -180,6 +225,18 @@ export default function AIAssistantDrawer({
                 <ClickableText text={msg.text} />
               </div>
 
+              {msg.aiNotice && (
+                <p style={{
+                  margin: 0,
+                  padding: '0 3px',
+                  color: 'var(--text-muted)',
+                  fontSize: '11px',
+                  lineHeight: 1.45
+                }}>
+                  {msg.aiNotice}
+                </p>
+              )}
+
               {msg.items && msg.items.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                   {msg.items.map(item => {
@@ -196,30 +253,14 @@ export default function AIAssistantDrawer({
                         gap: '8px'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '9px', overflow: 'hidden', minWidth: 0 }}>
-                          {item.type === 'image' && (item.previewUrl || item.url) ? (
-                            <a
-                              href={item.previewUrl || item.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={`View full image: ${item.title}`}
-                              style={{ width: '42px', height: '42px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}
-                            >
-                              {/* Search results should make matching screenshots immediately visible. */}
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={item.previewUrl || item.url}
-                                alt={item.title}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                              />
-                            </a>
-                          ) : item.type === 'image' ? (
-                            <ImageIcon size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-                          ) : null}
+                          <AssistantMediaPreview item={item} token={token} />
                           <div style={{ overflow: 'hidden', minWidth: 0 }}>
                             <p style={{ fontSize: '12px', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {item.title}
                             </p>
                             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {item.aiSourceNumber ? `SOURCE ${item.aiSourceNumber} • ` : ''}
+                              {(item.isPrivate || item.folderId?.isPrivate) ? 'LOCAL ONLY • ' : ''}
                               {item.type.toUpperCase()} {item.folderId ? `• ${item.folderId.name}` : ''}
                             </span>
                           </div>
@@ -311,16 +352,18 @@ export default function AIAssistantDrawer({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask assistant to find videos, PDFs, links, notes..."
+              placeholder="Search saved videos, PDFs, links, notes..."
               className="glass-input"
+              maxLength={1500}
+              aria-label="Ask the vault assistant"
               style={{ flex: 1, fontSize: '13px' }}
             />
             <button 
               type="submit"
               disabled={loading}
               style={{
-                width: '38px',
-                height: '38px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '8px',
                 background: 'var(--accent-primary)',
                 color: '#fff',
@@ -330,6 +373,7 @@ export default function AIAssistantDrawer({
                 justifyContent: 'center',
                 cursor: 'pointer'
               }}
+              aria-label="Send question"
             >
               <Send size={16} />
             </button>

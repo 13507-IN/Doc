@@ -50,20 +50,15 @@ if (isHolderWebsite() && document.readyState === 'loading') {
   syncTokenToExtension();
 }
 
-// Listen for window postMessage from Web App (login/logout/Google OAuth)
+// Receive a same-origin notification; never accept credentials in page messages.
 window.addEventListener('message', (event) => {
-  if (isHolderWebsite() && event.data && event.data.type === 'HOLDER_AUTH_TOKEN') {
-    if (event.data.token) {
-      chrome.runtime.sendMessage({
-        type: 'SYNC_HOLDER_AUTH',
-        token: event.data.token,
-        user: event.data.user
-      });
-    } else {
-      chrome.runtime.sendMessage({
-        type: 'CLEAR_HOLDER_AUTH'
-      });
-    }
+  if (
+    isHolderWebsite() &&
+    event.source === window &&
+    event.origin === location.origin &&
+    event.data?.type === 'HOLDER_AUTH_CHANGED'
+  ) {
+    syncTokenToExtension();
   }
 });
 

@@ -19,8 +19,8 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (isSignup && password.length < 6) {
-      setError('Use at least 6 characters for your password.');
+    if (isSignup && (password.length < 12 || new TextEncoder().encode(password).length > 72)) {
+      setError('Use at least 12 characters and no more than 72 UTF-8 bytes.');
       return;
     }
     setLoading(true);
@@ -32,9 +32,6 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
       const res = await axios.post(endpoint, payload);
 
       if (res.data.success && res.data.token) {
-        if (typeof window !== 'undefined') {
-          window.postMessage({ type: 'HOLDER_AUTH_TOKEN', token: res.data.token, user: res.data.user }, '*');
-        }
         onLoginSuccess(res.data.token, res.data.user);
       } else {
         setError(res.data.message || 'Authentication failed');
@@ -90,7 +87,7 @@ export default function AuthModal({ isOpen, onLoginSuccess }) {
             {isSignup ? 'Create Your Account' : 'Welcome Back'}
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            {isSignup ? 'Access your private personal assistant vault' : 'Sign in to access your saved videos, links & notes'}
+            {isSignup ? 'Create an account for your personal information vault' : 'Sign in to access your saved links, notes & files'}
           </p>
         </div>
 

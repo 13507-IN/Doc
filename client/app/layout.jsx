@@ -1,8 +1,9 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Holder — Personal Assistant & Info Vault',
-  description: 'Your intelligent personal assistant to save, organize, and retrieve YouTube videos, images, links, notes, and brand assets.',
+  title: 'Holder — Personal Vault Search & Info Organizer',
+  description: 'Save and organize links, notes, images, and PDFs. Search saved content with keyword matching and relevance rules; Holder does not generate answers.',
+  referrer: 'no-referrer',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [

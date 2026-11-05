@@ -1,8 +1,8 @@
 export default function manifest() {
   return {
-    name: 'Holder — Personal Assistant Vault',
+    name: 'Holder — Personal Information Vault',
     short_name: 'Holder',
-    description: 'Save, organize, and retrieve YouTube videos, links, notes, images, and screenshots with 1-tap sharing.',
+    description: 'Save and organize links, notes, images, PDFs, and screenshots. Search saved content with keyword matching.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0b0f19',

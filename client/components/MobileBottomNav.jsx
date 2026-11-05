@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Layers, Folder, Plus, Sparkles, Star } from 'lucide-react';
+import { Layers, Folder, Plus, Search, Star } from 'lucide-react';
 
 export default function MobileBottomNav({
   activeTab,
@@ -55,8 +55,8 @@ export default function MobileBottomNav({
         onClick={onToggleAssistant}
         className="bottom-nav-item"
       >
-        <Sparkles size={19} color="#60a5fa" />
-        <span>AI Vault</span>
+        <Search size={19} color="#60a5fa" />
+        <span>Search</span>
       </button>
 
       <button 

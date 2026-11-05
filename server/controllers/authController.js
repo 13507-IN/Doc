@@ -2,10 +2,12 @@ const User = require('../models/User');
 const Folder = require('../models/Folder');
 const Item = require('../models/Item');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const OAuthTicket = require('../models/OAuthTicket');
+const { createAccessToken } = require('../config/security');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'holder_jwt_secret_key_13507';
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 12);
 
 // Helper to seed default user folders and interactive starter items upon signup
 async function seedUserDefaultFolders(userId) {
@@ -77,42 +79,52 @@ async function seedUserDefaultFolders(userId) {
 // User Register
 exports.register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+    if (!name || name.length > 100 || !email || email.length > 254 || !password) {
+      return res.status(400).json({ success: false, message: 'Enter a valid name, email, and password.' });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+    if (password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
+      return res.status(400).json({
+        success: false,
+        message: 'Use a password with at least 12 characters and no more than 72 UTF-8 bytes.'
+      });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = new User({
       name,
-      email: email.toLowerCase(),
+      email,
       password: hashedPassword
     });
 
     await user.save();
     await seedUserDefaultFolders(user._id);
 
-    const token = jwt.sign({ id: user._id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
+    const token = createAccessToken(user);
 
+    res.set('Cache-Control', 'no-store');
     res.status(201).json({
       success: true,
       token,
       user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'An account with this email already exists.' });
+    }
     console.error('[Auth] Registration failed:', error.message);
     res.status(500).json({ success: false, message: 'Could not create your account. Please try again.' });
   }
@@ -121,28 +133,23 @@ exports.register = async (req, res) => {
 // User Login
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
 
-    if (!email || !password) {
+    if (!email || !password || email.length > 254 || Buffer.byteLength(password, 'utf8') > 72) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid email or password.' });
+    const user = await User.findOne({ email });
+    const isMatch = await bcrypt.compare(password, user?.password || DUMMY_PASSWORD_HASH);
+    if (!user || !user.password || !isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    if (!user.password) {
-      return res.status(400).json({ success: false, message: 'This account was created with Google Sign-In. Please click "Continue with Google".' });
-    }
+    const token = createAccessToken(user);
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid email or password.' });
-    }
-
-    const token = jwt.sign({ id: user._id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
-
+    res.set('Cache-Control', 'no-store');
     res.json({
       success: true,
       token,
@@ -159,15 +166,68 @@ exports.googleCallback = async (req, res) => {
   try {
     const user = req.user;
     if (!user) {
-      return res.redirect(`${CLIENT_URL}?error=oauth_failed`);
+      return res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
     }
 
-    const token = jwt.sign({ id: user._id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '30d' });
-    const userParam = encodeURIComponent(JSON.stringify({ id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }));
+    const code = crypto.randomBytes(32).toString('base64url');
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    await OAuthTicket.create({
+      codeHash,
+      userId: user._id,
+      expiresAt: new Date(Date.now() + 90 * 1000)
+    });
 
-    res.redirect(`${CLIENT_URL}/auth/callback?token=${token}&user=${userParam}`);
+    res.set('Cache-Control', 'no-store');
+    res.set('Referrer-Policy', 'no-referrer');
+    const redirect = () => res.redirect(`${CLIENT_URL}/auth/callback?code=${code}`);
+    if (req.session?.destroy) {
+      req.session.destroy((error) => {
+        if (error) {
+          console.error('[Auth] Could not clear OAuth session:', error.message);
+          return res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
+        }
+        return redirect();
+      });
+    } else {
+      redirect();
+    }
   } catch (error) {
-    res.redirect(`${CLIENT_URL}?error=${encodeURIComponent(error.message)}`);
+    console.error('[Auth] Google callback failed:', error.message);
+    res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
+  }
+};
+
+exports.exchangeGoogleCode = async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const code = typeof body.code === 'string' ? body.code : '';
+  if (!/^[A-Za-z0-9_-]{43}$/.test(code)) {
+    return res.status(400).json({ success: false, message: 'The sign-in code is invalid or expired.' });
+  }
+
+  try {
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const ticket = await OAuthTicket.findOneAndDelete({
+      codeHash,
+      expiresAt: { $gt: new Date() }
+    });
+    if (!ticket) {
+      return res.status(401).json({ success: false, message: 'The sign-in code is invalid or expired.' });
+    }
+
+    const user = await User.findById(ticket.userId).select('_id name email avatar');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'The sign-in code is invalid or expired.' });
+    }
+
+    return res.json({
+      success: true,
+      token: createAccessToken(user),
+      user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar || '' }
+    });
+  } catch (error) {
+    console.error('[Auth] OAuth code exchange failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not complete sign-in. Please try again.' });
   }
 };
 

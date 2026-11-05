@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Search, Plus, Sparkles, RefreshCw, Menu, Download, X } from 'lucide-react';
+import { Search, Plus, RefreshCw, Menu, Download, X } from 'lucide-react';
 
 export default function Navbar({ 
   searchQuery, 
@@ -133,10 +133,10 @@ export default function Navbar({
         <button 
           onClick={onToggleAssistant}
           className="navbar-btn-assistant"
-          title="AI Assistant"
+          title="Search your vault"
         >
-          <Sparkles size={15} color="#3b82f6" />
-          <span className="navbar-btn-label">AI Assistant</span>
+          <Search size={15} color="#3b82f6" />
+          <span className="navbar-btn-label">Search Vault</span>
         </button>
       </div>
     </header>

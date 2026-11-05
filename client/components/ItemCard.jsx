@@ -5,6 +5,7 @@ import {
   Tv, Image as ImageIcon, Link as LinkIcon, FileText, CalendarClock, Globe, Folder
 } from 'lucide-react';
 import { getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
+import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
 
 const ItemCard = React.memo(function ItemCard({ 
   item, 
@@ -17,6 +18,10 @@ const ItemCard = React.memo(function ItemCard({
   onDeleteItem 
 }) {
   const [copied, setCopied] = useState(false);
+  const imageSource = item.type === 'image'
+    ? item.mediaUrl || item.previewUrl || item.url || item.content
+    : null;
+  const imagePreviewUrl = usePrivateMediaUrl(imageSource);
   const websiteUrl = getWebsiteUrlForItem(item);
   const directLink = websiteUrl || (item.url ? ensureAbsoluteUrl(item.url) : null);
 
@@ -133,7 +138,7 @@ const ItemCard = React.memo(function ItemCard({
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundImage: `url(${item.previewUrl || item.url || item.content})`,
+              backgroundImage: imagePreviewUrl ? `url("${imagePreviewUrl}")` : 'none',
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}

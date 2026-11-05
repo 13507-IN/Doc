@@ -153,8 +153,8 @@ export default function AddFolderModal({ isOpen, onClose, onFolderCreated, token
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Lock size={16} color={isPrivate ? '#059669' : 'var(--text-muted)'} />
               <div>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>Lock as Private</p>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Require explicit unlock or password check</p>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>Mark as sensitive</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>An organizational label; it does not add a separate lock.</p>
               </div>
             </div>
             <input 

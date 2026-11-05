@@ -1,6 +1,12 @@
 const Item = require('../models/Item');
 const Folder = require('../models/Folder');
 const { extractUrlsFromText } = require('../services/ocrService');
+const { serializeItem } = require('../services/itemSerializer');
+const {
+  generateVaultAnswer,
+  isPrivateVaultItem,
+  isSensitiveQuery
+} = require('../services/cloudflareAiService');
 
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -46,12 +52,17 @@ function invalidateAssistantCache(userId) {
 exports.queryAssistant = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { query } = req.body;
-    if (!query || typeof query !== 'string') {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const query = typeof body.query === 'string' ? body.query.trim() : '';
+    if (!query) {
       return res.status(400).json({ success: false, message: 'Query prompt is required' });
+    }
+    if (query.length > 1500) {
+      return res.status(400).json({ success: false, message: 'Keep assistant questions under 1,500 characters.' });
     }
 
     // Check query cache first for sub-millisecond retrieval
+    res.set('Cache-Control', 'private, no-store, max-age=0');
     const cachedResponse = getCachedQuery(userId, query);
     if (cachedResponse) {
       return res.json(cachedResponse);
@@ -62,6 +73,10 @@ exports.queryAssistant = async (req, res) => {
 
     let matchedItems = [];
     let assistantMessage = '';
+    let aiGenerated = false;
+    let aiModel = null;
+    let aiNotice = '';
+    let aiSourceNumbers = new Map();
     let categoryDetected = null;
     const screenshotIntent = /\b(screenshot|screenshots|screen\s*shot|screen\s*shots|snap|snaps)\b/i.test(cleanQuery);
 
@@ -94,6 +109,7 @@ exports.queryAssistant = async (req, res) => {
       'important', 'everything', 'anything', 'folder', 'folders', 'item', 'items', 'youtube', 'video',
       'videos', 'yt', 'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'img', 'screenshot', 'screenshots', 'screen', 'shot', 'shots', 'snap', 'snaps', 'link', 'links',
       'website', 'websites', 'url', 'bookmark', 'bookmarks', 'note', 'notes', 'code', 'snippet', 'snippets', 'text', 'pdf', 'pdfs', 'document', 'documents', 'paper', 'papers',
+      'what', 'do', 'did', 'have', 'saved', 'vault', 'summarize', 'summary', 'overview', 'details', 'detail', 'about', 'tell', 'everything',
       ...(targetFolder ? targetFolder.name.toLowerCase().split(/\W+/).filter(t => t.length > 0) : [])
     ]);
     const keywordTerms = cleanQuery
@@ -112,7 +128,7 @@ exports.queryAssistant = async (req, res) => {
           textConditions,
           { score: { $meta: 'textScore' } }
         )
-          .populate('folderId', 'name icon color')
+          .populate('folderId', 'name icon color isPrivate')
           .sort({ score: { $meta: 'textScore' }, pinned: -1, createdAt: -1 })
           .limit(35)
           .lean();
@@ -154,13 +170,13 @@ exports.queryAssistant = async (req, res) => {
       }
 
       matchedItems = await Item.find(itemQuery)
-        .populate('folderId', 'name icon color')
+        .populate('folderId', 'name icon color isPrivate')
         .sort({ pinned: -1, createdAt: -1 })
         .limit(35)
         .lean();
     }
 
-    // AI Relevance Ranking
+    // Deterministic relevance scoring; this endpoint does not call a generative model.
     if (keywordTerms.length > 0 && matchedItems.length > 0) {
       matchedItems.forEach(item => {
         let score = (item.score || 0) * 10;
@@ -260,12 +276,48 @@ exports.queryAssistant = async (req, res) => {
       });
     }
 
+    const sensitiveQuery = isSensitiveQuery(query);
+    const localOnlyQuery = sensitiveQuery ||
+      /\b(link|links|website|websites|url|urls|address)\b/i.test(cleanQuery);
+    const privateMatchCount = matchedItems.filter(isPrivateVaultItem).length;
+
+    if (totalCount > 0 && localOnlyQuery) {
+      aiNotice = sensitiveQuery
+        ? 'Sensitive lookups stay local. Matching vault text is not sent to Cloudflare Workers AI.'
+        : 'Link lookups stay local so saved URLs are not sent to Cloudflare Workers AI.';
+    } else if (totalCount > 0) {
+      try {
+        const aiResult = await generateVaultAnswer({ query, items: matchedItems });
+        assistantMessage = aiResult.answer;
+        aiGenerated = true;
+        aiModel = aiResult.model;
+        aiSourceNumbers = new Map(aiResult.sources.map((source) => [source.id, source.sourceNumber]));
+        if (privateMatchCount > 0) {
+          aiNotice = 'Private records stay local and were not included in this AI answer.';
+        }
+      } catch {
+        if (privateMatchCount > 0 && matchedItems.every(isPrivateVaultItem)) {
+          aiNotice = 'Private records were kept out of Cloudflare AI. Matching records below are shown only in your signed-in vault.';
+        } else {
+          aiNotice = 'AI answers are temporarily unavailable; showing matching vault records instead.';
+        }
+      }
+    }
+
     const responsePayload = {
       success: true,
       query,
       answer: assistantMessage,
       count: totalCount,
-      matchedItems,
+      matchedItems: matchedItems.map((item) => {
+        const serialized = serializeItem(item);
+        const sourceNumber = aiGenerated ? aiSourceNumbers.get(String(item._id)) : null;
+        if (sourceNumber) serialized.aiSourceNumber = sourceNumber;
+        return serialized;
+      }),
+      aiGenerated,
+      aiModel,
+      aiNotice,
       targetFolder: targetFolder ? { id: targetFolder._id, name: targetFolder.name } : null
     };
 
@@ -273,8 +325,8 @@ exports.queryAssistant = async (req, res) => {
     res.json(responsePayload);
 
   } catch (error) {
-    console.error('Error in queryAssistant:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('[Search] Vault query failed:', error.message);
+    res.status(500).json({ success: false, message: 'Vault search failed. Please try again.' });
   }
 };
 

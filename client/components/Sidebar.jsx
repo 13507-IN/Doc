@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
-import { 
-  Folder, Plus, Sparkles, Layers, 
+import {
+  Folder, Plus, Search, Layers, Sparkles,
   Tv, Image as ImageIcon, Link as LinkIcon, FileText, Bookmark, Star, Lock, LogOut, X, Smartphone
 } from 'lucide-react';
 
@@ -73,7 +73,7 @@ export default function Sidebar({
               <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
                 HOLDER
               </h1>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Personal Assistant Vault</p>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Personal Information Vault</p>
             </div>
           </div>
           {onCloseMobile && (
@@ -88,7 +88,7 @@ export default function Sidebar({
           )}
         </div>
 
-      {/* AI Assistant Button */}
+      {/* Rule-based vault search */}
       <button 
         onClick={onOpenAssistant}
         style={{
@@ -115,8 +115,8 @@ export default function Sidebar({
           e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.35)';
         }}
       >
-        <Sparkles size={16} color="#3b82f6" />
-        <span>Ask Personal Assistant</span>
+        <Search size={16} color="#3b82f6" />
+        <span>Search Your Vault</span>
       </button>
 
       {/* Quick Nav / Views */}

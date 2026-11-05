@@ -324,12 +324,12 @@ export default function OnboardingGuide({
           }
         />
 
-        {/* Step 2: Try AI Search */}
+        {/* Step 2: Try rule-based vault search */}
         <GuideTaskRow
           isDone={tasks.ai}
           step="2"
-          title="Ask the AI Assistant for Flight Wi-Fi"
-          description="Ask questions in plain English to automatically extract passwords, codes, and websites from screenshot text."
+          title="Search your vault for Flight Wi-Fi"
+          description="Keyword matching and relevance rules find saved items and extracted screenshot text; this feature does not generate answers."
           actionBtn={
             <button
               onClick={() => {
@@ -350,7 +350,7 @@ export default function OnboardingGuide({
                 gap: '6px'
               }}
             >
-              <Sparkles size={13} color="#60a5fa" />
+              <Search size={13} color="#60a5fa" />
               <span>{tasks.ai ? 'Test Again' : 'Try: "Find Wi-Fi password"'}</span>
             </button>
           }
