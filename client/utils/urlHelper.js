@@ -1,6 +1,7 @@
 // Utility functions for URL detection, formatting, and safe external redirection
 
-const URL_REGEX = /(?:https?:\/\/|www\.)[^\s<>"'{}|\\^`[\]]+|(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|edu|gov|in|me|info|tv)(?:\/[^\s<>"'{}|\\^`[\]]*)?/gi;
+const COMMON_TLDS = '(?:com|org|net|io|ai|dev|app|edu|gov|co|in|me|info|tv|xyz|so|sh|cc)';
+const HIGH_CONFIDENCE_TLDS = '(?:com|org|net|io|ai|dev|app|edu|gov)';
 
 export function ensureAbsoluteUrl(url) {
   if (!url) return '';
@@ -11,21 +12,65 @@ export function ensureAbsoluteUrl(url) {
   return `https://${trimmed}`;
 }
 
+function cleanDomainPart(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/^[^a-z0-9]+/, '')
+    .replace(/[^a-z0-9_-]+$/, '');
+}
+
 export function extractUrlsFromText(text) {
   if (!text) return [];
-  const matches = String(text).match(URL_REGEX) || [];
-  const urls = [];
-  for (const match of matches) {
+  const urls = new Set();
+  const lowerText = String(text).toLowerCase();
+
+  // 1. Standard explicit URLs
+  const standardRegex = new RegExp(`(?:https?:\\/\\/|www\\.)[^\\s<>"'{}|\\\\^\`\\[\\]]+|(?:[a-zA-Z0-9-]+\\.)+${COMMON_TLDS}(?:\\/[^\\s<>"'{}|\\\\^\`\\[\\]]*)?`, 'gi');
+  const standardMatches = String(text).match(standardRegex) || [];
+  for (const match of standardMatches) {
     let clean = match.replace(/[.,;:)\]]+$/, '');
     clean = ensureAbsoluteUrl(clean);
     try {
       const parsed = new URL(clean);
-      if (parsed.hostname && parsed.hostname.includes('.') && !urls.includes(clean)) {
-        urls.push(clean);
+      if (parsed.hostname && parsed.hostname.includes('.') && !urls.has(clean)) {
+        urls.add(clean);
       }
     } catch (e) {}
   }
-  return urls;
+
+  // 2. Fuzzy Address-Bar Domain Recovery for OCR distortions (e.g. "neriisorg" -> "nextjs.org")
+  const fuzzyRegex = new RegExp(`(?:^|[\\s|/\\\\>@&])([a-zA-Z0-9_-]{2,30})[\\s,;:.\\-_]?(${HIGH_CONFIDENCE_TLDS})\\b(?:\\/([^\\s<>"'{}|\\\\^\`\\[\\]]*))?`, 'gi');
+  let match;
+  while ((match = fuzzyRegex.exec(text)) !== null) {
+    let domain = cleanDomainPart(match[1]);
+    const tld = match[2].toLowerCase();
+    const pathPart = match[3] ? `/${match[3]}` : '';
+
+    if (['and', 'for', 'the', 'with', 'this', 'from', 'have', 'that', 'your', 'about', 'some', 'more', 'copy', 'item'].includes(domain)) {
+      continue;
+    }
+
+    // Common OCR letter confusions in small address bar fonts
+    if ((domain.includes('neriis') || domain.includes('nextis') || domain === 'next') && (lowerText.includes('next') || lowerText.includes('react'))) {
+      domain = 'nextjs';
+    }
+
+    if (domain === 'githuh' || domain === 'githud') {
+      domain = 'github';
+    }
+
+    if (domain.length >= 3) {
+      const candidate = `https://${domain}.${tld}${pathPart}`;
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.hostname && parsed.hostname.includes('.')) {
+          urls.add(candidate);
+        }
+      } catch (e) {}
+    }
+  }
+
+  return Array.from(urls);
 }
 
 export function isImageFileUrl(url) {
