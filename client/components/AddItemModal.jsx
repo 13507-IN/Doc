@@ -5,6 +5,7 @@ import {
   Upload, Lock, AlertCircle, Loader2
 } from 'lucide-react';
 import axios from 'axios';
+import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -79,6 +80,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [folderId, setFolderId] = useState(defaultFolderId || '');
   const [isPrivate, setIsPrivate] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [stagedUpload, setStagedUpload] = useState(null);
   const [metadata, setMetadata] = useState({});
   const [expiresAt, setExpiresAt] = useState('');
   const [reminderDays, setReminderDays] = useState(30);
@@ -92,10 +94,30 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [storageNotice, setStorageNotice] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
   const lastExtractedUrlRef = useRef('');
 
   const isEditing = Boolean(editingItem);
+  const privateImagePreview = usePrivateMediaUrl(
+    stagedUpload?.type === 'image'
+      ? stagedUpload.mediaUrl
+      : (isEditing && activeTab === 'image' ? editingItem?.mediaUrl : null),
+    token
+  );
+
+  const releaseStagedUpload = async (uploadId) => {
+    if (!uploadId || !token) return;
+    try {
+      await axios.delete(`${API_BASE}/uploads/${uploadId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (error) {
+      if (error.response?.status !== 404) {
+        console.warn('[Holder] Staged media will be removed automatically after it expires.');
+      }
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -105,6 +127,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     lastExtractedUrlRef.current = '';
     const timer = window.setTimeout(() => {
       if (editingItem) {
+        setStagedUpload(null);
         setActiveTab(editingItem.type);
         setUrl(editingItem.url || '');
         setTitle(editingItem.title || '');
@@ -132,6 +155,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
 
       if (prefillUrl) {
+        setStagedUpload(null);
         const isYt = prefillUrl.includes('youtube.com') || prefillUrl.includes('youtu.be');
         const isPdf = prefillUrl.toLowerCase().endsWith('.pdf');
         setActiveTab(isYt ? 'youtube' : (isPdf ? 'pdf' : 'link'));
@@ -153,6 +177,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         setPdfFileName('');
         setPdfFileSize('');
         setSaveError('');
+        setStorageNotice('');
         setDuplicateWarning('');
 
         // Auto-extract metadata for prefilled URL
@@ -180,6 +205,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       }
 
       setActiveTab('youtube');
+      setStagedUpload(null);
       setUrl('');
       setTitle('');
       setContent('');
@@ -198,6 +224,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       setPdfFileName('');
       setPdfFileSize('');
       setSaveError('');
+      setStorageNotice('');
       setDuplicateWarning('');
     }, 0);
     return () => window.clearTimeout(timer);
@@ -294,14 +321,19 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
 
       if (res.data.success) {
         if (res.data.storage === 'local') {
-          console.error('[Holder] Cloudinary is unavailable; image was saved to server-local storage.', res.data.storageWarning);
-          setSaveError(res.data.storageWarning || 'Cloudinary is unavailable. This image is stored on the server disk.');
+          console.warn('[Holder] Image stored on server-local storage.', res.data.storageWarning);
+          setStorageNotice(res.data.storageWarning || 'Stored on server-local storage (Cloudinary not configured on this host).');
+        } else {
+          setStorageNotice('');
         }
-        setPreviewUrl(res.data.imageUrl);
+        await releaseStagedUpload(stagedUpload?.uploadId);
+        setStagedUpload({
+          uploadId: res.data.uploadId,
+          mediaUrl: res.data.mediaUrl,
+          type: 'image'
+        });
         setMetadata((current) => ({
           ...current,
-          cloudinaryPublicId: res.data.cloudinaryPublicId,
-          localFilename: res.data.localFilename,
           ...(res.data.ocrText ? { ocrPreview: res.data.ocrText.slice(0, 160) } : {})
         }));
         if (res.data.ocrText) {
@@ -378,7 +410,14 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       });
 
       if (res.data.success) {
-        setUrl(res.data.pdfUrl);
+        await releaseStagedUpload(stagedUpload?.uploadId);
+        setStagedUpload({
+          uploadId: res.data.uploadId,
+          mediaUrl: res.data.mediaUrl,
+          type: 'pdf'
+        });
+        setUrl('');
+        setPreviewUrl('');
         setPdfFileName(res.data.filename);
         const formattedSize = res.data.size > 1024 * 1024
           ? (res.data.size / (1024 * 1024)).toFixed(1) + ' MB'
@@ -389,9 +428,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           ...current,
           filename: res.data.filename,
           size: res.data.size,
-          storageType: res.data.storageType,
-          localFilename: res.data.localFilename,
-          cloudinaryPublicId: res.data.cloudinaryPublicId
+          storageType: res.data.storageType
         }));
 
         if (!title) {
@@ -411,13 +448,14 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     if (e) e.preventDefault();
     if (!title) return;
 
-    if (activeTab === 'pdf' && !url) {
+    if (activeTab === 'pdf' && !url && stagedUpload?.type !== 'pdf') {
       setSaveError('Please upload a PDF document or enter a PDF URL before saving.');
       return;
     }
 
     try {
       setSaveError('');
+      setStorageNotice('');
       setDuplicateWarning('');
       setSubmitting(true);
 
@@ -436,6 +474,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         ocrText,
         allowDuplicate: Boolean(forceSave)
       };
+      if (stagedUpload?.type === activeTab) {
+        payload.uploadId = stagedUpload.uploadId;
+      }
 
       const request = isEditing
         ? axios.put(`${API_BASE}/items/${editingItem._id}`, payload, {
@@ -464,6 +505,8 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   };
 
   const handleReset = () => {
+    void releaseStagedUpload(stagedUpload?.uploadId);
+    setStagedUpload(null);
     setUrl('');
     setTitle('');
     setContent('');
@@ -474,52 +517,74 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     setPdfFileSize('');
   };
 
+  const handleClose = () => {
+    void releaseStagedUpload(stagedUpload?.uploadId);
+    setStagedUpload(null);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 100,
-      background: 'rgba(0, 0, 0, 0.75)',
-      backdropFilter: 'blur(10px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px'
-    }}>
-      <div className="glass-panel animate-scale-in" style={{
-        width: '100%',
-        maxWidth: '580px',
-        borderRadius: '20px',
-        overflow: 'hidden',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
-      }}>
-        {/* Header */}
+    <div 
+      onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(0, 0, 0, 0.8)',
+        backdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        overflow: 'hidden'
+      }}
+    >
+      <div 
+        className="glass-panel animate-scale-in" 
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: '580px',
+          maxHeight: 'calc(100vh - 32px)',
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: '20px',
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary, #111827)'
+        }}
+      >
+        {/* Header - Fixed at top */}
         <div style={{
-          padding: '18px 24px',
+          padding: '16px 24px',
           borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between'
+          justifyContent: 'space-between',
+          flexShrink: 0
         }}>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff' }}>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: '#fff', margin: 0 }}>
             {isEditing ? 'Edit Vault Item' : 'Save New Item to Holder'}
           </h2>
           <button 
-            onClick={onClose}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            type="button"
+            onClick={handleClose}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Type Selector Tabs */}
+        {/* Type Selector Tabs - Fixed at top */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(5, 1fr)',
           borderBottom: '1px solid var(--border-color)',
-          background: 'rgba(10, 12, 22, 0.4)'
+          background: 'rgba(10, 12, 22, 0.5)',
+          flexShrink: 0
         }}>
           <TabBtn 
             active={activeTab === 'youtube'} 
@@ -554,7 +619,26 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form 
+          onSubmit={handleSubmit} 
+          style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            flex: 1, 
+            minHeight: 0, 
+            overflow: 'hidden',
+            margin: 0
+          }}
+        >
+          {/* Scrollable Form Body */}
+          <div style={{
+            padding: '20px 24px',
+            overflowY: 'auto',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
           
           {/* URL Input for YouTube & Link */}
           {(activeTab === 'youtube' || activeTab === 'link') && (
@@ -716,6 +800,8 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                   value={previewUrl}
                   onChange={(e) => {
                     setPreviewUrl(e.target.value);
+                    void releaseStagedUpload(stagedUpload?.uploadId);
+                    setStagedUpload(null);
                     setMetadata((current) => {
                       const next = { ...current };
                       delete next.cloudinaryPublicId;
@@ -745,8 +831,26 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                   <input type="file" accept="image/*" onChange={handleImageFileChange} style={{ display: 'none' }} />
                 </label>
               </div>
-              {previewUrl && (
-                <div style={{ marginTop: '10px', height: '100px', borderRadius: '10px', backgroundImage: 'url(' + previewUrl + ')', backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              {(privateImagePreview || previewUrl) && (
+                <div style={{ marginTop: '10px', height: '100px', borderRadius: '10px', backgroundImage: `url("${privateImagePreview || previewUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              )}
+              {storageNotice && (
+                <div style={{
+                  marginTop: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(234, 179, 8, 0.1)',
+                  border: '1px solid rgba(234, 179, 8, 0.25)',
+                  borderRadius: '8px',
+                  padding: '7px 10px',
+                  fontSize: '11px',
+                  color: '#facc15',
+                  lineHeight: '1.4'
+                }}>
+                  <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{storageNotice}</span>
+                </div>
               )}
             </div>
           )}
@@ -829,9 +933,12 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
             />
             <label htmlFor="isPrivate" style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Lock size={14} color="#ec4899" />
-              <span>Mark as Private / Sensitive Item</span>
+              <span>Mark as sensitive</span>
             </label>
           </div>
+          <p style={{ marginTop: '-4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+            This label is for organization; it does not encrypt the item or add another access check.
+          </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
             <div>
@@ -882,43 +989,62 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
             </div>
           )}
 
-          {/* Submit */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-            {saveError && (
-              <p role="alert" style={{ flex: 1, alignSelf: 'center', color: '#fda4af', fontSize: '12px', lineHeight: 1.4 }}>
-                {saveError}
-              </p>
-            )}
-            <button 
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '10px 18px',
-                borderRadius: '10px',
-                background: 'transparent',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-muted)',
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit"
-              disabled={submitting}
-              style={{
-                padding: '10px 24px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
-              }}
-            >
-              {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Save to Vault'}
-            </button>
+          </div>
+
+          {/* Submit Footer - Pinned at bottom */}
+          <div style={{
+            padding: '14px 24px',
+            borderTop: '1px solid var(--border-color)',
+            background: 'rgba(11, 15, 25, 0.95)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexShrink: 0
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {saveError && (
+                <p role="alert" style={{ margin: 0, color: '#fda4af', fontSize: '12px', lineHeight: 1.4 }}>
+                  {saveError}
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+              <button 
+                type="button"
+                onClick={handleClose}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 500
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                disabled={submitting}
+                style={{
+                  padding: '9px 22px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  opacity: submitting ? 0.7 : 1,
+                  boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                }}
+              >
+                {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Save to Vault'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
