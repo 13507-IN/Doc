@@ -216,7 +216,7 @@ connectDB().then(() => {
     });
   }, 30 * 60 * 1000);
   uploadCleanupTimer.unref();
-  app.listen(PORT, () => {
-    console.log(`[Server] Holder API ready on port http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Server] Holder API ready on port http://0.0.0.0:${PORT}`);
   });
 });

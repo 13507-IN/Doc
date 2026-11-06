@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const passport = require('passport');
 const multer = require('multer');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 const authController = require('../controllers/authController');
 const folderController = require('../controllers/folderController');
@@ -31,8 +31,7 @@ const metadataRateLimit = rateLimit({
 const userActionRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  keyGenerator: (req) => req.user?.id || req.ip,
-  validate: { ip: false },
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, message: 'Too many uploads. Try again later.' }
@@ -41,8 +40,7 @@ const userActionRateLimit = rateLimit({
 const assistantRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
-  keyGenerator: (req) => req.user?.id || req.ip,
-  validate: { ip: false },
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, message: 'Too many assistant requests. Try again in 15 minutes.' }
