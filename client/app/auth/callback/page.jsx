@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -7,18 +7,20 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const hasExchangedRef = useRef(false);
 
   useEffect(() => {
     const code = searchParams.get('code');
 
     if (!code) {
-      router.replace('/?error=oauth_failed');
+      if (!hasExchangedRef.current) {
+        router.replace('/?error=missing_code');
+      }
       return;
     }
 
-    // Remove the short-lived one-time code from browser history before exchanging it.
-    window.history.replaceState(null, '', '/auth/callback');
-    let cancelled = false;
+    if (hasExchangedRef.current) return;
+    hasExchangedRef.current = true;
 
     fetch(`${API_BASE}/auth/oauth/exchange`, {
       method: 'POST',
@@ -32,7 +34,6 @@ function CallbackContent() {
         if (!response.ok || !result.success || !result.token || !result.user) {
           throw new Error(result.message || 'Could not complete Google sign-in.');
         }
-        if (cancelled) return;
 
         const userObj = result.user;
         localStorage.setItem('holder_token', result.token);
@@ -45,15 +46,9 @@ function CallbackContent() {
         router.replace('/');
       })
       .catch((err) => {
-        if (!cancelled) {
-          console.error('OAuth Callback Error:', err.message);
-          router.replace('/?error=oauth_failed');
-        }
+        console.error('[OAuth Callback Error]:', err.message);
+        router.replace(`/?error=${encodeURIComponent(err.message || 'oauth_failed')}`);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [router, searchParams]);
 
   return (

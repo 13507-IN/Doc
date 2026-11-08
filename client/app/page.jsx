@@ -23,6 +23,7 @@ export default function Home() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState('');
 
   const [items, setItems] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -127,6 +128,19 @@ export default function Home() {
         }
       } else {
         setIsAuthOpen(true);
+      }
+
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const oauthErr = urlParams.get('error');
+        if (oauthErr) {
+          const friendlyMessage = oauthErr === 'oauth_failed'
+            ? 'Google sign-in could not be completed. Please try again or use email sign-in.'
+            : `Google sign-in error: ${decodeURIComponent(oauthErr).replace(/_/g, ' ')}`;
+          setAuthErrorMessage(friendlyMessage);
+          setIsAuthOpen(true);
+          window.history.replaceState(null, '', window.location.pathname);
+        }
       }
     }, 0);
     return () => window.clearTimeout(timer);
@@ -416,6 +430,7 @@ export default function Home() {
       {/* Auth Modal */}
       <AuthModal 
         isOpen={isAuthOpen}
+        initialError={authErrorMessage}
         onLoginSuccess={handleLoginSuccess}
       />
 

@@ -72,9 +72,9 @@ async function seedUserDefaultFolders(userId) {
 }
 
 module.exports = function configurePassport() {
-  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-  const SERVER_URL = process.env.SERVER_URL || 'http://localhost:5000';
+  const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const SERVER_URL = (process.env.SERVER_URL || (process.env.NODE_ENV === 'production' ? 'https://doc-boc6.onrender.com' : 'http://localhost:5000')).trim().replace(/\/$/, '');
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     console.warn('[Passport] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing in environment variables. Google OAuth will be disabled until set.');
@@ -86,7 +86,8 @@ module.exports = function configurePassport() {
       {
         clientID: GOOGLE_CLIENT_ID,
         clientSecret: GOOGLE_CLIENT_SECRET,
-        callbackURL: `${SERVER_URL}/api/auth/google/callback`
+        callbackURL: `${SERVER_URL}/api/auth/google/callback`,
+        proxy: true
       },
       async (accessToken, refreshToken, profile, done) => {
         try {

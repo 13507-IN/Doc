@@ -87,13 +87,26 @@ router.get('/auth/google', (req, res, next) => {
       message: 'Google OAuth is not configured on the server. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to environment variables.' 
     });
   }
-  passport.authenticate('google', { scope: ['profile', 'email'], state: true })(req, res, next);
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 
-router.get('/auth/google/callback', 
-  passport.authenticate('google', { failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:3000'}/?error=oauth_failed`, session: false }),
-  authController.googleCallback
-);
+router.get('/auth/google/callback', (req, res, next) => {
+  const clientUrl = (process.env.CLIENT_URL || 'https://doc-pied-five.vercel.app').trim().replace(/\/$/, '');
+  passport.authenticate('google', { session: false }, (err, user, info) => {
+    if (err) {
+      console.error('[Google OAuth] Strategy error:', err.message || err);
+      const msg = encodeURIComponent(err.message || 'oauth_strategy_error');
+      return res.redirect(`${clientUrl}/?error=${msg}`);
+    }
+    if (!user) {
+      console.error('[Google OAuth] Authentication failed:', info);
+      const msg = encodeURIComponent(info?.message || 'Authentication could not be completed');
+      return res.redirect(`${clientUrl}/?error=${msg}`);
+    }
+    req.user = user;
+    return authController.googleCallback(req, res, next);
+  })(req, res, next);
+});
 
 // Public Metadata Scraper Route
 router.post('/metadata/extract', metadataRateLimit, metadataController.extractMetadata);

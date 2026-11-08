@@ -163,10 +163,11 @@ exports.login = async (req, res) => {
 
 // Google OAuth Callback Handler
 exports.googleCallback = async (req, res) => {
+  const clientUrl = (process.env.CLIENT_URL || 'https://doc-pied-five.vercel.app').trim().replace(/\/$/, '');
   try {
     const user = req.user;
     if (!user) {
-      return res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
+      return res.redirect(`${clientUrl}/?error=no_user_found`);
     }
 
     const code = crypto.randomBytes(32).toString('base64url');
@@ -174,17 +175,16 @@ exports.googleCallback = async (req, res) => {
     await OAuthTicket.create({
       codeHash,
       userId: user._id,
-      expiresAt: new Date(Date.now() + 90 * 1000)
+      expiresAt: new Date(Date.now() + 120 * 1000)
     });
 
     res.set('Cache-Control', 'no-store');
     res.set('Referrer-Policy', 'no-referrer');
-    const redirect = () => res.redirect(`${CLIENT_URL}/auth/callback?code=${code}`);
+    const redirect = () => res.redirect(`${clientUrl}/auth/callback?code=${code}`);
     if (req.session?.destroy) {
       req.session.destroy((error) => {
         if (error) {
           console.error('[Auth] Could not clear OAuth session:', error.message);
-          return res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
         }
         return redirect();
       });
@@ -193,7 +193,7 @@ exports.googleCallback = async (req, res) => {
     }
   } catch (error) {
     console.error('[Auth] Google callback failed:', error.message);
-    res.redirect(`${CLIENT_URL}/?error=oauth_failed`);
+    res.redirect(`${clientUrl}/?error=${encodeURIComponent(error.message || 'callback_error')}`);
   }
 };
 
