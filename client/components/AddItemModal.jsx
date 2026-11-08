@@ -96,6 +96,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [saveError, setSaveError] = useState('');
   const [storageNotice, setStorageNotice] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
+  const [localImagePreview, setLocalImagePreview] = useState('');
+  const [localImageName, setLocalImageName] = useState('');
+  const [localImageSize, setLocalImageSize] = useState('');
   const lastExtractedUrlRef = useRef('');
 
   const isEditing = Boolean(editingItem);
@@ -106,6 +109,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       : (isEditing && activeTab === 'image' ? editingItem?.mediaUrl : null),
     activeToken
   );
+  const effectiveImagePreview = localImagePreview || privateImagePreview || previewUrl || (isEditing && activeTab === 'image' ? (editingItem?.mediaUrl || editingItem?.previewUrl) : '');
 
   const releaseStagedUpload = async (uploadId) => {
     if (!uploadId || !activeToken) return;
@@ -305,6 +309,23 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   // Process image with client-side compression and upload with fast OCR
   const processAndUploadImage = async (rawFile) => {
     if (!rawFile) return;
+
+    // Generate immediate client-side instant preview before network upload
+    try {
+      if (localImagePreview) {
+        URL.revokeObjectURL(localImagePreview);
+      }
+      const objUrl = URL.createObjectURL(rawFile);
+      setLocalImagePreview(objUrl);
+      setLocalImageName(rawFile.name || 'Pasted Image');
+      setLocalImageSize(
+        rawFile.size > 1024 * 1024
+          ? (rawFile.size / (1024 * 1024)).toFixed(1) + ' MB'
+          : Math.round(rawFile.size / 1024) + ' KB'
+      );
+    } catch (e) {
+      console.warn('[Holder] Local object URL generation failed:', e);
+    }
 
     try {
       setUploadingImage(true);
@@ -509,9 +530,29 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     }
   };
 
+  const handleClearImage = () => {
+    if (localImagePreview) {
+      URL.revokeObjectURL(localImagePreview);
+      setLocalImagePreview('');
+    }
+    setLocalImageName('');
+    setLocalImageSize('');
+    setPreviewUrl('');
+    setOcrText('');
+    setStorageNotice('');
+    void releaseStagedUpload(stagedUpload?.uploadId);
+    setStagedUpload(null);
+  };
+
   const handleReset = () => {
     void releaseStagedUpload(stagedUpload?.uploadId);
     setStagedUpload(null);
+    if (localImagePreview) {
+      URL.revokeObjectURL(localImagePreview);
+      setLocalImagePreview('');
+    }
+    setLocalImageName('');
+    setLocalImageSize('');
     setUrl('');
     setTitle('');
     setContent('');
@@ -520,11 +561,21 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     setMetadata({});
     setPdfFileName('');
     setPdfFileSize('');
+    setOcrText('');
+    setStorageNotice('');
+    setSaveError('');
+    setDuplicateWarning('');
   };
 
   const handleClose = () => {
     void releaseStagedUpload(stagedUpload?.uploadId);
     setStagedUpload(null);
+    if (localImagePreview) {
+      URL.revokeObjectURL(localImagePreview);
+      setLocalImagePreview('');
+    }
+    setLocalImageName('');
+    setLocalImageSize('');
     onClose();
   };
 
@@ -836,8 +887,91 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                   <input type="file" accept="image/*" onChange={handleImageFileChange} style={{ display: 'none' }} />
                 </label>
               </div>
-              {(privateImagePreview || previewUrl) && (
-                <div style={{ marginTop: '10px', height: '100px', borderRadius: '10px', backgroundImage: `url("${privateImagePreview || previewUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              {effectiveImagePreview && (
+                <div style={{
+                  marginTop: '12px',
+                  background: '#0b111c',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
+                }}>
+                  {/* Image Display */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '10px',
+                    maxHeight: '220px',
+                    background: 'radial-gradient(circle at center, rgba(30, 41, 59, 0.4) 0%, rgba(11, 17, 28, 0.8) 100%)'
+                  }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={effectiveImagePreview}
+                      alt="Image preview"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '200px',
+                        objectFit: 'contain',
+                        borderRadius: '8px',
+                        display: 'block'
+                      }}
+                    />
+                  </div>
+
+                  {/* Info & action bar */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontSize: '12px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' }}>
+                      <ImageIcon size={14} color="#60a5fa" style={{ flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', fontWeight: 500, fontSize: '12px' }}>
+                        {localImageName || (isEditing ? editingItem?.title : 'Image Preview')}
+                      </span>
+                      {localImageSize && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', background: 'rgba(255, 255, 255, 0.06)', padding: '2px 6px', borderRadius: '4px' }}>
+                          {localImageSize}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {uploadingImage && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#60a5fa', fontSize: '11px', fontWeight: 600 }}>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Reading text...</span>
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleClearImage}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#f87171',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Remove image"
+                      >
+                        <X size={12} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
               {storageNotice && (
                 <div style={{
