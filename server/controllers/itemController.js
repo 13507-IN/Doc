@@ -1,7 +1,9 @@
 const Item = require('../models/Item');
+const Folder = require('../models/Folder');
 const { cloudinary, configured: cloudinaryConfigured } = require('../config/cloudinary');
 const { enqueueItemOcr, recognize, extractUrlsFromText } = require('../services/ocrService');
 const { isVisionHtrAvailable, transcribeImageWithVision } = require('../services/visionHtrService');
+const { autoAnalyzeContent, enrichItemWithAi } = require('../services/autoTaggerService');
 const { invalidateAssistantCache } = require('./assistantController');
 const PendingUpload = require('../models/PendingUpload');
 const axios = require('axios');
@@ -1053,6 +1055,9 @@ exports.transcribeItemVision = async (req, res) => {
     item.markModified('metadata');
     await item.save();
 
+    // Auto-enrich item title, tags, and folder in background now that full text is transcribed
+    enrichItemWithAi(item).catch(() => {});
+
     invalidateAssistantCache(req.user.id);
     const populated = await Item.findById(item._id).populate('folderId', 'name icon color');
     res.json({
@@ -1064,5 +1069,69 @@ exports.transcribeItemVision = async (req, res) => {
   } catch (error) {
     console.error('[Vision HTR] Manual transcribe failed:', error.message);
     res.status(500).json({ success: false, message: error.message || 'Vision transcription failed' });
+  }
+};
+
+// Suggest tags, smart title, and folder using AI based on content
+exports.suggestItemTags = async (req, res) => {
+  try {
+    const { text, url, title } = req.body || {};
+    const userFolders = await Folder.find({ userId: req.user.id }).select('_id name');
+    const folderNames = userFolders.map((f) => f.name);
+
+    const result = await autoAnalyzeContent({
+      text: String(text || ''),
+      url: String(url || ''),
+      currentTitle: String(title || ''),
+      existingFolders: folderNames
+    });
+
+    let matchedFolderId = null;
+    let matchedFolderName = '';
+    if (result.folder) {
+      const match = userFolders.find(
+        (f) => f.name.toLowerCase() === result.folder.toLowerCase()
+      );
+      if (match) {
+        matchedFolderId = match._id;
+        matchedFolderName = match.name;
+      }
+    }
+
+    res.json({
+      success: true,
+      title: result.title,
+      tags: result.tags || [],
+      folderId: matchedFolderId,
+      folderName: matchedFolderName || result.folder || '',
+      summary: result.summary || '',
+      source: result.source || 'ai'
+    });
+  } catch (error) {
+    console.error('[AutoTagger] suggestItemTags failed:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Auto-tagging suggestion failed' });
+  }
+};
+
+// Explicitly auto-tag and enrich an existing item
+exports.autoTagItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await Item.findOne({ _id: id, userId: req.user.id });
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
+
+    await enrichItemWithAi(item, { force: true });
+    invalidateAssistantCache(req.user.id);
+
+    const populated = await Item.findById(item._id).populate('folderId', 'name icon color');
+    res.json({
+      success: true,
+      item: serializeItem(populated)
+    });
+  } catch (error) {
+    console.error('[AutoTagger] autoTagItem failed:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Auto-tagging item failed' });
   }
 };

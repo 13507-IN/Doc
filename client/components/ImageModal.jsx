@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { X, ExternalLink, Copy, Check, Globe, Sparkles, Loader2 } from 'lucide-react';
+import { X, ExternalLink, Copy, Check, Globe, Sparkles, Loader2, Tag } from 'lucide-react';
 import ClickableText from './ClickableText';
 import { extractUrlsFromText, getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
@@ -10,6 +10,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 export default function ImageModal({ item, onClose, onItemUpdated, token }) {
   const [copied, setCopied] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [autoTagging, setAutoTagging] = useState(false);
   const [transcribeError, setTranscribeError] = useState('');
   const imageSrc = usePrivateMediaUrl(
     item?.mediaUrl || item?.previewUrl || item?.url || item?.content
@@ -64,6 +65,33 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
       setTranscribeError(err.message || 'Failed to transcribe handwriting');
     } finally {
       setTranscribing(false);
+    }
+  };
+
+  const handleAutoTag = async () => {
+    if (autoTagging || !item?._id) return;
+    setAutoTagging(true);
+    setTranscribeError('');
+    try {
+      const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
+      const res = await fetch(`${API_BASE}/items/${item._id}/auto-tag`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${activeToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Auto-tagging failed');
+      }
+      if (onItemUpdated && data.item) {
+        onItemUpdated(data.item);
+      }
+    } catch (err) {
+      setTranscribeError(err.message || 'Failed to auto-tag item');
+    } finally {
+      setAutoTagging(false);
     }
   };
 
@@ -234,6 +262,29 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
                 <span>{transcribing ? 'Transcribing...' : 'Scan Handwriting'}</span>
               </button>
 
+              <button
+                onClick={handleAutoTag}
+                disabled={autoTagging}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#34d399',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  cursor: autoTagging ? 'not-allowed' : 'pointer',
+                  opacity: autoTagging ? 0.7 : 1
+                }}
+                title="Use AI to auto-tag, improve title, and file into best folder"
+              >
+                {autoTagging ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />}
+                <span>{autoTagging ? 'Tagging...' : 'AI Auto-Tag'}</span>
+              </button>
+
               {item.ocrText && (
                 <button onClick={copyOcr} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center', border: 0, background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
                   {copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}
@@ -256,6 +307,31 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
             <p style={{ margin: '4px 0', fontSize: '11px', color: 'var(--text-dim)' }}>
               No text detected by local OCR. Click <strong>Scan Handwriting</strong> for deep AI transcription.
             </p>
+          )}
+
+          {item.metadata?.aiSummary && (
+            <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '6px', borderLeft: '3px solid #60a5fa', fontSize: '11px', color: '#cbd5e1' }}>
+              <strong style={{ color: '#93c5fd' }}>AI Summary:</strong> {item.metadata.aiSummary}
+            </div>
+          )}
+
+          {item.tags && item.tags.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Tags:</span>
+              {item.tags.map((tag, idx) => (
+                <span key={idx} style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  background: 'rgba(37, 99, 235, 0.12)',
+                  color: '#93c5fd',
+                  border: '1px solid rgba(37, 99, 235, 0.3)',
+                  padding: '1px 7px',
+                  borderRadius: '12px'
+                }}>
+                  #{tag}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>

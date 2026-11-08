@@ -133,6 +133,8 @@ router.post('/items/upload-image', authMiddleware, userActionRateLimit, upload.s
 router.post('/items/screenshot', authMiddleware, userActionRateLimit, upload.single('image'), itemController.createScreenshot);
 router.post('/items/upload-pdf', authMiddleware, userActionRateLimit, uploadPdf.single('pdf'), itemController.uploadPdf);
 router.post('/items/:id/transcribe-vision', authMiddleware, userActionRateLimit, itemController.transcribeItemVision);
+router.post('/items/suggest-tags', authMiddleware, userActionRateLimit, itemController.suggestItemTags);
+router.post('/items/:id/auto-tag', authMiddleware, userActionRateLimit, itemController.autoTagItem);
 
 // Multer otherwise falls through to Express's HTML error page. API clients
 // need a JSON response they can show to the user.

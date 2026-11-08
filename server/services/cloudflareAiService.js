@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const DEFAULT_MODEL = '@cf/meta/llama-3.2-3b-instruct';
 const MAX_SOURCES = 6;
 const MAX_EXCERPT_CHARS = 1800;
 const MAX_CONTEXT_CHARS = 11000;

@@ -3,6 +3,7 @@ const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
 const Item = require('../models/Item');
 const { isVisionHtrAvailable, transcribeImageWithVision } = require('./visionHtrService');
+const { enrichItemWithAi } = require('./autoTaggerService');
 
 let workerPromise = null;
 let queue = Promise.resolve();
@@ -379,6 +380,19 @@ function enqueueItemOcr(itemId, buffer, options = {}) {
         }
 
         await Item.findByIdAndUpdate(itemId, updateData);
+
+        // Auto-enrich item title, tags, and folder using AI if title is generic or tags are empty
+        if (ocrText && ocrText.length >= 10) {
+          Item.findById(itemId)
+            .then((freshItem) => {
+              if (freshItem) {
+                enrichItemWithAi(freshItem).catch((tagErr) => {
+                  console.warn('[OCR] Auto-tagging post-OCR failed:', tagErr.message);
+                });
+              }
+            })
+            .catch(() => {});
+        }
       } catch (error) {
         console.error('[OCR] Failed to extract text for item %s: %s', itemId, error.message);
         workerPromise = null;

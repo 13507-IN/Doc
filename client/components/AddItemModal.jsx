@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Tv, Image as ImageIcon, Link as LinkIcon, FileText, 
-  Upload, Lock, AlertCircle, Loader2
+  Upload, Lock, AlertCircle, Loader2, Sparkles, Check
 } from 'lucide-react';
 import axios from 'axios';
 import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
@@ -96,6 +96,8 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const [saveError, setSaveError] = useState('');
   const [storageNotice, setStorageNotice] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
+  const [autoTagging, setAutoTagging] = useState(false);
+  const [aiNotice, setAiNotice] = useState('');
   const [localImagePreview, setLocalImagePreview] = useState('');
   const [localImageName, setLocalImageName] = useState('');
   const [localImageSize, setLocalImageSize] = useState('');
@@ -293,6 +295,64 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
     }
   };
 
+  // AI Auto-File & Smart Tagger: analyzes content with Cloudflare Workers AI
+  const handleAiAutoDetect = async (overridePayload = {}) => {
+    if (autoTagging) return;
+    const textToAnalyze = overridePayload.text || ocrText || content || metadata?.description || '';
+    const urlToAnalyze = overridePayload.url || url || '';
+    const titleToAnalyze = overridePayload.title || title || '';
+
+    if (!textToAnalyze && !urlToAnalyze && !titleToAnalyze) {
+      return;
+    }
+
+    setAutoTagging(true);
+    setAiNotice('');
+    try {
+      const res = await axios.post(`${API_BASE}/items/suggest-tags`, {
+        text: textToAnalyze,
+        url: urlToAnalyze,
+        title: titleToAnalyze
+      }, {
+        headers: { Authorization: `Bearer ${activeToken}` },
+        timeout: 15000
+      });
+
+      if (res.data?.success) {
+        let appliedAny = false;
+        // Auto-suggest title if current title is empty or generic
+        if (res.data.title && (!title || /^Screenshot/i.test(title) || /^img-/i.test(title) || /^file/i.test(title))) {
+          setTitle(res.data.title);
+          appliedAny = true;
+        }
+
+        // Auto-suggest tags
+        if (Array.isArray(res.data.tags) && res.data.tags.length > 0) {
+          const currentTags = tags ? tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) : [];
+          const merged = [...new Set([...currentTags, ...res.data.tags.map((t) => t.toLowerCase())])];
+          setTags(merged.join(', '));
+          appliedAny = true;
+        }
+
+        // Auto-select folder if not currently chosen
+        if (res.data.folderId && (!folderId || folderId === 'null' || folderId === 'undefined')) {
+          setFolderId(res.data.folderId);
+          appliedAny = true;
+        }
+
+        if (appliedAny) {
+          const folderMsg = res.data.folderName ? ` -> ${res.data.folderName}` : '';
+          setAiNotice(`AI auto-tagged${folderMsg}`);
+          window.setTimeout(() => setAiNotice(''), 4500);
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoTagger] Suggestion failed:', err.message);
+    } finally {
+      setAutoTagging(false);
+    }
+  };
+
   // Debounced auto-extractor: starts fetching within 350ms of pasting or typing a URL
   useEffect(() => {
     if (!isOpen) return;
@@ -361,6 +421,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
         }));
         if (res.data.ocrText) {
           setOcrText(res.data.ocrText);
+          void handleAiAutoDetect({ text: res.data.ocrText });
         }
         if (!title) {
           const rawName = rawFile.name ? rawFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, ' ').trim() : '';
@@ -1047,9 +1108,33 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
             </div>
 
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>
-                Tags (comma separated)
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Tags (comma separated)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleAiAutoDetect()}
+                  disabled={autoTagging}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#60a5fa',
+                    cursor: autoTagging ? 'wait' : 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 6px',
+                    borderRadius: '4px'
+                  }}
+                  title="Auto-suggest title, tags, and best folder using AI"
+                >
+                  {autoTagging ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                  <span>{autoTagging ? 'Tagging...' : 'AI Auto-Detect'}</span>
+                </button>
+              </div>
               <input 
                 type="text"
                 value={tags}
@@ -1058,6 +1143,20 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                 className="glass-input"
                 style={{ width: '100%' }}
               />
+              {aiNotice && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginTop: '5px',
+                  color: '#34d399',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}>
+                  <Check size={12} />
+                  <span>{aiNotice}</span>
+                </div>
+              )}
             </div>
           </div>
 
