@@ -506,6 +506,7 @@ exports.createItem = async (req, res) => {
         }
       : {};
     const isUploadedPdf = Boolean(pendingUpload && uploadedResourceType === 'raw');
+    const isImageUpload = Boolean(pendingUpload && uploadedResourceType === 'image');
 
     const item = new Item({
       userId,
@@ -514,7 +515,8 @@ exports.createItem = async (req, res) => {
       folderId: folderId || null,
       url: isUploadedPdf ? '' : (url || ''),
       content: content || '',
-      ocrText: ocrText || '',
+      ocrText: isImageUpload ? '' : (ocrText || ''),
+      ocrStatus: isImageUpload ? 'pending' : (ocrText ? 'done' : 'none'),
       previewUrl: pendingUpload ? '' : (previewUrl || ''),
       tags: processedTags,
       metadata: {
@@ -539,14 +541,15 @@ exports.createItem = async (req, res) => {
     }
     // Ownership transferred to the saved item; later response/population errors
     // must never remove media that the item now references.
+    const activeUpload = pendingUpload;
     consumedUpload = null;
     invalidateAssistantCache(userId);
     const populatedItem = await Item.findById(item._id).populate('folderId', 'name icon color');
 
     // If item was created from an uploaded image, enqueue background OCR for deep transcription (including handwriting Vision HTR)
-    if (pendingUpload && pendingUpload.cloudinaryResourceType === 'image') {
+    if (isImageUpload && activeUpload) {
       getItemImageBuffer(item)
-        .then((buf) => enqueueItemOcr(item._id, buf, { mimeType: pendingUpload.mimeType || 'image/jpeg' }))
+        .then((buf) => enqueueItemOcr(item._id, buf, { mimeType: activeUpload.mimeType || 'image/jpeg' }))
         .catch((err) => console.warn('[OCR] Background OCR enqueue deferred:', err.message));
     }
 
@@ -637,6 +640,10 @@ exports.updateItem = async (req, res) => {
       };
       updateData.previewUrl = '';
       if (expectedResourceType === 'raw') updateData.url = '';
+      if (expectedResourceType === 'image') {
+        updateData.ocrStatus = 'pending';
+        updateData.ocrText = '';
+      }
     }
     updateData.metadata = nextMetadata;
 
@@ -658,9 +665,16 @@ exports.updateItem = async (req, res) => {
     }
 
     // The update committed, so the newly staged file belongs to the item now.
+    const activeUpload = pendingUpload;
     pendingUpload = null;
     if (replacedMedia) {
       await discardStoredMedia(oldMetadata);
+    }
+
+    if (activeUpload && expectedResourceType === 'image') {
+      getItemImageBuffer(item)
+        .then((buf) => enqueueItemOcr(item._id, buf, { mimeType: activeUpload.mimeType || 'image/jpeg' }))
+        .catch((err) => console.warn('[OCR] Background OCR update enqueue deferred:', err.message));
     }
 
     invalidateAssistantCache(userId);

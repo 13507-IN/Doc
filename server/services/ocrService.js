@@ -245,35 +245,69 @@ async function initWorker() {
 }
 
 const COMMON_ENGLISH_WORDS = new Set([
-  'the', 'of', 'and', 'to', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'i', 'at', 'be', 'this', 'have', 'from', 'or', 'one', 'had', 'by', 'word', 'but', 'not', 'what', 'all', 'were', 'we', 'when', 'your', 'can', 'said', 'there', 'use', 'an', 'each', 'which', 'she', 'do', 'how', 'their', 'if', 'will', 'up', 'other', 'about', 'out', 'many', 'then', 'them', 'these', 'so', 'some', 'her', 'would', 'make', 'like', 'him', 'into', 'time', 'has', 'look', 'two', 'more', 'write', 'go', 'see', 'number', 'no', 'way', 'could', 'people', 'my', 'than', 'first', 'water', 'been', 'call', 'who', 'oil', 'its', 'now', 'find', 'long', 'down', 'day', 'did', 'get', 'come', 'made', 'may', 'part', 'process', 'random', 'system', 'function', 'state', 'sample', 'value', 'order', 'second', 'third', 'strict', 'sense', 'mean', 'variance', 'properties', 'change', 'shift', 'result', 'results', 'stationary', 'physical', 'meaning', 'translation', 'probability', 'several', 'types', 'code', 'import', 'const', 'return', 'function', 'class', 'export', 'default', 'true', 'false', 'null', 'undefined', 'new', 'async', 'await', 'item', 'items', 'user', 'data', 'text', 'error', 'name', 'title', 'view', 'page', 'home', 'app', 'link', 'click', 'open', 'save', 'file', 'image', 'path', 'test', 'type', 'list', 'create', 'update', 'delete', 'select', 'where', 'from', 'table', 'database', 'status', 'token', 'auth', 'login', 'signup', 'email', 'password', 'setting', 'settings', 'search', 'filter', 'dashboard', 'report', 'analytics', 'source', 'header', 'footer', 'button', 'input', 'form', 'modal', 'card', 'box', 'panel', 'container', 'wrapper', 'style', 'color', 'background', 'border', 'width', 'height', 'padding', 'margin', 'display', 'flex', 'grid', 'font', 'size', 'weight', 'bold', 'dark', 'light', 'mode'
+  // Core English vocabulary
+  'the', 'of', 'and', 'to', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'i', 'at', 'be', 'this', 'have', 'from', 'or', 'one', 'had', 'by', 'word', 'words', 'but', 'not', 'what', 'all', 'were', 'we', 'when', 'your', 'can', 'said', 'there', 'use', 'an', 'each', 'which', 'she', 'do', 'how', 'their', 'if', 'will', 'up', 'other', 'about', 'out', 'many', 'then', 'them', 'these', 'so', 'some', 'her', 'would', 'make', 'like', 'him', 'into', 'time', 'times', 'has', 'look', 'two', 'more', 'write', 'written', 'go', 'see', 'number', 'numbers', 'no', 'way', 'could', 'people', 'my', 'than', 'first', 'water', 'been', 'call', 'who', 'oil', 'its', 'now', 'find', 'long', 'down', 'day', 'days', 'did', 'get', 'come', 'made', 'may', 'part', 'parts', 'over', 'new', 'sound', 'take', 'only', 'little', 'work', 'know', 'place', 'year', 'years', 'live', 'me', 'back', 'give', 'most', 'very', 'after', 'thing', 'things', 'our', 'just', 'name', 'good', 'sentence', 'man', 'think', 'say', 'great', 'where', 'help', 'through', 'much', 'before', 'line', 'lines', 'right', 'too', 'means', 'old', 'any', 'same', 'tell', 'boy', 'follow', 'came', 'want', 'show', 'also', 'around', 'form', 'three', 'small', 'set', 'put', 'end', 'does', 'another', 'well', 'large', 'must', 'big', 'even', 'such', 'because', 'turn', 'here', 'why', 'ask', 'went', 'men', 'read', 'need', 'land', 'different', 'home', 'us', 'move', 'try', 'kind', 'hand', 'picture', 'again', 'change', 'off', 'play', 'spell', 'air', 'away', 'animal', 'house', 'point', 'page', 'letter', 'mother', 'answer', 'found', 'study', 'still', 'learn', 'should', 'america', 'world', 'high', 'every', 'near', 'add', 'food', 'between', 'own', 'below', 'country', 'plant', 'last', 'school', 'father', 'keep', 'tree', 'never', 'start', 'city', 'earth', 'eye', 'light', 'thought', 'head', 'under', 'story', 'saw', 'left', 'don', 'few', 'while', 'along', 'might', 'close', 'something', 'seem', 'next', 'hard', 'open', 'example', 'begin', 'life', 'always', 'those', 'both', 'paper', 'together', 'got', 'group', 'often', 'run', 'important', 'until', 'children', 'side', 'feet', 'car', 'mile', 'night', 'walk', 'white', 'sea', 'began', 'grow', 'took', 'river', 'four', 'carry', 'state', 'once', 'book', 'hear', 'stop', 'without', 'second', 'late', 'miss', 'idea', 'enough', 'eat', 'face', 'watch', 'far', 'indian', 'real', 'almost', 'let', 'above', 'girl', 'sometimes', 'mountains', 'cut', 'young', 'talk', 'soon', 'list', 'song', 'being', 'leave', 'family', 'itself',
+
+  // Academic, Mathematics, Statistics, Engineering & Science terms
+  'process', 'processes', 'random', 'system', 'systems', 'function', 'functions', 'state', 'states', 'sample', 'samples', 'value', 'values', 'order', 'second', 'third', 'fourth', 'strict', 'sense', 'mean', 'variance', 'moments', 'property', 'properties', 'change', 'changes', 'shift', 'shifts', 'result', 'results', 'stationary', 'stationarity', 'physical', 'meaning', 'translation', 'probability', 'stochastic', 'several', 'types', 'equation', 'equations', 'formula', 'formulas', 'theorem', 'proof', 'definition', 'definitions', 'variable', 'variables', 'constant', 'constants', 'derivative', 'integral', 'matrix', 'vector', 'calculus', 'algebra', 'linear', 'signal', 'signals', 'frequency', 'filter', 'discrete', 'continuous', 'distribution', 'density', 'gaussian', 'normal', 'expectation', 'correlation', 'covariance', 'white', 'noise', 'spectral', 'power', 'ratio', 'space', 'limit', 'series', 'sequence', 'infinite', 'finite', 'dimension', 'dimensions', 'model', 'models', 'analysis', 'theory', 'experiment', 'lecture', 'notes', 'chapter', 'section', 'problem', 'solution', 'exercise', 'homework', 'exam', 'course', 'professor', 'student',
+
+  // Code, Tech & UI terms
+  'code', 'import', 'const', 'let', 'var', 'return', 'class', 'export', 'default', 'true', 'false', 'null', 'undefined', 'async', 'await', 'item', 'items', 'user', 'users', 'data', 'text', 'error', 'title', 'view', 'page', 'home', 'app', 'link', 'links', 'click', 'save', 'file', 'files', 'image', 'images', 'path', 'test', 'type', 'types', 'create', 'update', 'delete', 'select', 'where', 'table', 'database', 'status', 'token', 'auth', 'login', 'signup', 'email', 'password', 'setting', 'settings', 'search', 'filter', 'dashboard', 'report', 'analytics', 'source', 'header', 'footer', 'button', 'input', 'form', 'modal', 'card', 'box', 'panel', 'container', 'wrapper', 'style', 'color', 'background', 'border', 'width', 'height', 'padding', 'margin', 'display', 'flex', 'grid', 'font', 'size', 'weight', 'bold', 'dark', 'light', 'mode'
 ]);
 
+function isGibberishToken(token) {
+  if (!token || token.length < 3) return false;
+  const lower = token.toLowerCase();
+
+  // Words with 4 or more consecutive consonants (rare in valid English, typical of cursive misread)
+  if (/[bcdfghjklmnpqrstvwxz]{4,}/.test(lower)) {
+    // Whitelist common consonant cluster words
+    if (!/length|strength|struct|script|catch|match|switch|spring|string|splash|screen/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // Tokens with internal tildes, carets, slashes or unusual punctuation mashed in
+  if (/[~^\\|_\`@]/.test(token)) return true;
+
+  // Words with 4+ letters having no vowels at all
+  if (lower.length >= 4 && !/[aeiouy]/.test(lower)) return true;
+
+  return false;
+}
+
 function shouldTriggerVisionHtr({ text, confidence, width, height }) {
-  // 1. Tesseract confidence below threshold or absent (handwriting / cursive typically scores < 65%)
-  if (!confidence || confidence < 65) return true;
+  // 1. Tesseract confidence below threshold or absent (handwriting / cursive typically scores 20%-65%)
+  if (!confidence || confidence < 72) return true;
 
   // 2. Large canvas / visual area but very sparse text (< 35 chars)
   if (width >= 300 && height >= 200 && text.length < 35) return true;
 
-  // 3. Token-level analysis for handwriting & garbled cursive non-words
+  // 3. Token-level analysis for handwriting, cursive strokes & garbled non-words
   const rawTokens = text.split(/\s+/).filter(Boolean);
-  if (rawTokens.length >= 8) {
+  if (rawTokens.length >= 6) {
     const alphaTokens = rawTokens
       .map((t) => t.toLowerCase().replace(/[^a-z]/g, ''))
       .filter((t) => t.length >= 2);
 
-    if (alphaTokens.length >= 6) {
+    if (alphaTokens.length >= 4) {
       const recognized = alphaTokens.filter((t) => COMMON_ENGLISH_WORDS.has(t)).length;
       const recognizedRatio = recognized / alphaTokens.length;
 
-      // Low dictionary word ratio (< 35%) with confidence < 80% indicates garbled cursive
-      if (recognizedRatio < 0.35 && confidence < 80) return true;
+      // Low dictionary word ratio (< 42%) with confidence < 82% indicates garbled cursive
+      if (recognizedRatio < 0.42 && confidence < 82) return true;
     }
 
-    // High ratio of isolated 1-2 char fragments (typical of fragmented cursive strokes)
+    // High ratio of isolated 1-2 char fragments (typical of fragmented cursive strokes like fy, fa, fp, te, fe)
     const shortTokens = rawTokens.filter((t) => t.replace(/[^a-zA-Z0-9]/g, '').length <= 2);
     const shortRatio = shortTokens.length / rawTokens.length;
-    if (shortRatio > 0.40 && confidence < 80) return true;
+    if (shortRatio > 0.35 && confidence < 82) return true;
+
+    // Detect high proportion of unpronounceable / gibberish tokens
+    const gibberishCount = rawTokens.filter(isGibberishToken).length;
+    if (gibberishCount >= 2 && (gibberishCount / rawTokens.length) > 0.20 && confidence < 85) {
+      return true;
+    }
   }
 
   return false;

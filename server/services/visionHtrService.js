@@ -15,6 +15,8 @@ function cleanVisionTranscript(rawText) {
   let cleaned = rawText.trim();
   cleaned = cleaned.replace(/^The image shows[\s\S]*?(?:Here is the transcribed (?:content|text)|Here is the transcription|transcription:)\s*[:\n]*/i, '');
   cleaned = cleaned.replace(/\n+\*\*Note:\*\*[\s\S]*$/i, '');
+  cleaned = cleaned.replace(/\n+\*\*Mathematical Formulas\*\*[\s\S]*?(?:No mathematical formulas|None)[\s\S]*$/i, '');
+  cleaned = cleaned.replace(/\n+(?:Mathematical Formulas|Formulas):\s*(?:None|N\/A|No formulas)[^\n]*$/i, '');
   return cleaned.trim() || rawText.trim();
 }
 
@@ -86,7 +88,7 @@ async function transcribeWithCloudflareVision(imageBuffer, mimeType = 'image/jpe
       const resultText = runPayload?.result?.response || runPayload?.result?.description || runPayload?.response;
       if (typeof resultText === 'string' && resultText.trim()) {
         return {
-          text: resultText.trim(),
+          text: cleanVisionTranscript(resultText),
           provider: 'cloudflare-workers-ai',
           model
         };
@@ -126,7 +128,7 @@ async function transcribeWithCloudflareVision(imageBuffer, mimeType = 'image/jpe
       const content = payload?.choices?.[0]?.message?.content;
       if (typeof content === 'string' && content.trim()) {
         return {
-          text: content.trim(),
+          text: cleanVisionTranscript(content),
           provider: 'cloudflare-workers-ai',
           model
         };
@@ -191,7 +193,7 @@ async function transcribeWithGeminiVision(imageBuffer, mimeType = 'image/jpeg', 
     const candidate = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (typeof candidate === 'string' && candidate.trim()) {
       return {
-        text: candidate.trim(),
+        text: cleanVisionTranscript(candidate),
         provider: 'gemini-vision',
         model
       };

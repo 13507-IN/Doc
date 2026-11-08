@@ -394,7 +394,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       const formData = new FormData();
       formData.append('image', file);
 
-      const res = await axios.post(`${API_BASE}/items/upload-image?ocr=true`, formData, {
+      const res = await axios.post(`${API_BASE}/items/upload-image`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${activeToken}`
@@ -407,7 +407,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           console.warn('[Holder] Image stored on server-local storage.', res.data.storageWarning);
           setStorageNotice(res.data.storageWarning || 'Stored on server-local storage (Cloudinary not configured on this host).');
         } else {
-          setStorageNotice('');
+          setStorageNotice('Image uploaded. You can save to your vault now; text and handwriting reading will process in the background.');
         }
         await releaseStagedUpload(stagedUpload?.uploadId);
         setStagedUpload({
@@ -415,14 +415,7 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
           mediaUrl: res.data.mediaUrl,
           type: 'image'
         });
-        setMetadata((current) => ({
-          ...current,
-          ...(res.data.ocrText ? { ocrPreview: res.data.ocrText.slice(0, 160) } : {})
-        }));
-        if (res.data.ocrText) {
-          setOcrText(res.data.ocrText);
-          void handleAiAutoDetect({ text: res.data.ocrText });
-        }
+        setOcrText('');
         if (!title) {
           const rawName = rawFile.name ? rawFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, ' ').trim() : '';
           setTitle(rawName || `Screenshot — ${new Date().toLocaleDateString()}`);
@@ -1006,7 +999,13 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
                       {uploadingImage && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#60a5fa', fontSize: '11px', fontWeight: 600 }}>
                           <Loader2 size={12} className="animate-spin" />
-                          <span>Reading text...</span>
+                          <span>Uploading...</span>
+                        </span>
+                      )}
+                      {stagedUpload && !uploadingImage && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#34d399', fontSize: '11px', fontWeight: 600 }}>
+                          <Check size={13} />
+                          <span>Ready to save</span>
                         </span>
                       )}
                       <button

@@ -12,8 +12,51 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
   const [transcribing, setTranscribing] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
   const [transcribeError, setTranscribeError] = useState('');
+  const [currentItem, setCurrentItem] = useState(item);
+
+  useEffect(() => {
+    setCurrentItem(item);
+  }, [item]);
+
+  const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
+
+  // Poll for background OCR completion when status is processing or pending
+  useEffect(() => {
+    if (!currentItem?._id) return;
+    if (currentItem.ocrStatus !== 'processing' && currentItem.ocrStatus !== 'pending') return;
+
+    let isCancelled = false;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/items/${currentItem._id}`, {
+          headers: {
+            'Authorization': `Bearer ${activeToken}`
+          }
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.success && data?.item && !isCancelled) {
+          if (data.item.ocrStatus === 'done' || data.item.ocrStatus === 'failed') {
+            setCurrentItem(data.item);
+            if (onItemUpdated) {
+              onItemUpdated(data.item);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[ImageModal] OCR polling check:', e.message);
+      }
+    }, 2500);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentItem?._id, currentItem?.ocrStatus, activeToken, onItemUpdated]);
+
   const imageSrc = usePrivateMediaUrl(
-    item?.mediaUrl || item?.previewUrl || item?.url || item?.content
+    currentItem?.mediaUrl || currentItem?.previewUrl || currentItem?.url || currentItem?.content
   );
 
   useEffect(() => {
@@ -24,30 +67,30 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  if (!item) return null;
+  if (!currentItem) return null;
 
   // Extract all detected website URLs from the screenshot
-  const primaryWebsiteUrl = getWebsiteUrlForItem(item);
-  const allOcrUrls = extractUrlsFromText(item.ocrText);
+  const primaryWebsiteUrl = getWebsiteUrlForItem(currentItem);
+  const allOcrUrls = extractUrlsFromText(currentItem.ocrText);
   const detectedUrls = Array.from(new Set([
     ...(primaryWebsiteUrl ? [primaryWebsiteUrl] : []),
-    ...(item.metadata?.detectedUrls || []),
+    ...(currentItem.metadata?.detectedUrls || []),
     ...allOcrUrls
   ].map(ensureAbsoluteUrl)));
 
   const copyOcr = async () => {
-    await navigator.clipboard.writeText(item.ocrText);
+    if (!currentItem.ocrText) return;
+    await navigator.clipboard.writeText(currentItem.ocrText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
 
   const handleTranscribeVision = async () => {
-    if (transcribing || !item?._id) return;
+    if (transcribing || !currentItem?._id) return;
     setTranscribing(true);
     setTranscribeError('');
     try {
-      const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
-      const res = await fetch(`${API_BASE}/items/${item._id}/transcribe-vision`, {
+      const res = await fetch(`${API_BASE}/items/${currentItem._id}/transcribe-vision`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${activeToken}`,
@@ -58,8 +101,11 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Vision transcription failed');
       }
-      if (onItemUpdated && data.item) {
-        onItemUpdated(data.item);
+      if (data.item) {
+        setCurrentItem(data.item);
+        if (onItemUpdated) {
+          onItemUpdated(data.item);
+        }
       }
     } catch (err) {
       setTranscribeError(err.message || 'Failed to transcribe handwriting');
@@ -69,12 +115,11 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
   };
 
   const handleAutoTag = async () => {
-    if (autoTagging || !item?._id) return;
+    if (autoTagging || !currentItem?._id) return;
     setAutoTagging(true);
     setTranscribeError('');
     try {
-      const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
-      const res = await fetch(`${API_BASE}/items/${item._id}/auto-tag`, {
+      const res = await fetch(`${API_BASE}/items/${currentItem._id}/auto-tag`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${activeToken}`,
@@ -85,8 +130,11 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Auto-tagging failed');
       }
-      if (onItemUpdated && data.item) {
-        onItemUpdated(data.item);
+      if (data.item) {
+        setCurrentItem(data.item);
+        if (onItemUpdated) {
+          onItemUpdated(data.item);
+        }
       }
     } catch (err) {
       setTranscribeError(err.message || 'Failed to auto-tag item');
@@ -95,8 +143,9 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
     }
   };
 
-  const ocrEngine = item.metadata?.ocrEngine;
+  const ocrEngine = currentItem.metadata?.ocrEngine;
   const isVisionEngine = ocrEngine === 'cloudflare-workers-ai' || ocrEngine === 'gemini-vision';
+  const isProcessingOcr = currentItem.ocrStatus === 'processing' || currentItem.ocrStatus === 'pending';
 
   return (
     <div onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} style={{
@@ -122,7 +171,7 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
       }}>
         {/* Header toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', color: '#fff' }}>
-          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 600 }}>{item.title}</h3>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 600 }}>{currentItem.title}</h3>
           <div style={{ display: 'flex', gap: '12px' }}>
             {imageSrc && <a href={imageSrc} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)' }} title="Open Original Image">
               <ExternalLink size={18} />
@@ -190,7 +239,7 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
         <img
           src={imageSrc || undefined}
           hidden={!imageSrc}
-          alt={item.title} 
+          alt={currentItem.title} 
           style={{
             maxWidth: '100%',
             maxHeight: detectedUrls.length > 0 ? '55vh' : '65vh',
@@ -201,16 +250,52 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
         />
         {!imageSrc && (
           <p role="status" style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-            {item.mediaUrl ? 'Loading private image…' : 'Image unavailable.'}
+            {currentItem.mediaUrl ? 'Loading private image…' : 'Image unavailable.'}
           </p>
         )}
 
         {/* OCR / Vision HTR Extracted Text */}
         <div className="glass-panel" style={{ width: '100%', padding: '12px 14px', borderRadius: '10px' }}>
+          {/* Background Reading Progress Banner */}
+          {isProcessingOcr && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              marginBottom: '10px',
+              borderRadius: '8px',
+              background: 'rgba(37, 99, 235, 0.15)',
+              border: '1px solid rgba(37, 99, 235, 0.35)',
+              color: '#93c5fd',
+              fontSize: '12px',
+              fontWeight: 500
+            }}>
+              <Loader2 size={14} className="animate-spin" style={{ flexShrink: 0 }} />
+              <span>Reading text & handwriting with AI in the background...</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <strong style={{ fontSize: '12px', color: '#fff' }}>Extracted Text</strong>
-              {isVisionEngine ? (
+              {isProcessingOcr ? (
+                <span style={{
+                  fontSize: '10px',
+                  background: 'rgba(37, 99, 235, 0.2)',
+                  color: '#93c5fd',
+                  border: '1px solid rgba(37, 99, 235, 0.4)',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <Loader2 size={10} className="animate-spin" />
+                  Reading...
+                </span>
+              ) : isVisionEngine ? (
                 <span style={{
                   fontSize: '10px',
                   background: 'rgba(249, 115, 22, 0.15)',
@@ -241,7 +326,7 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
                 onClick={handleTranscribeVision}
-                disabled={transcribing}
+                disabled={transcribing || isProcessingOcr}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -253,8 +338,8 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
                   border: '1px solid rgba(37, 99, 235, 0.4)',
                   padding: '4px 8px',
                   borderRadius: '6px',
-                  cursor: transcribing ? 'not-allowed' : 'pointer',
-                  opacity: transcribing ? 0.7 : 1
+                  cursor: (transcribing || isProcessingOcr) ? 'not-allowed' : 'pointer',
+                  opacity: (transcribing || isProcessingOcr) ? 0.7 : 1
                 }}
                 title="Deep scan using Cloudflare Workers AI for handwriting, formulas & whiteboards"
               >
@@ -285,7 +370,7 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
                 <span>{autoTagging ? 'Tagging...' : 'AI Auto-Tag'}</span>
               </button>
 
-              {item.ocrText && (
+              {currentItem.ocrText && (
                 <button onClick={copyOcr} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center', border: 0, background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
                   {copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}
                 </button>
@@ -299,26 +384,30 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
             </p>
           )}
 
-          {item.ocrText ? (
+          {currentItem.ocrText ? (
             <div style={{ margin: 0, whiteSpace: 'pre-wrap', maxHeight: '110px', overflowY: 'auto', fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-              <ClickableText text={item.ocrText} />
+              <ClickableText text={currentItem.ocrText} />
             </div>
+          ) : isProcessingOcr ? (
+            <p style={{ margin: '4px 0', fontSize: '11px', color: '#93c5fd' }}>
+              Transcribing handwritten notes and text with AI... Results will appear here shortly.
+            </p>
           ) : (
             <p style={{ margin: '4px 0', fontSize: '11px', color: 'var(--text-dim)' }}>
               No text detected by local OCR. Click <strong>Scan Handwriting</strong> for deep AI transcription.
             </p>
           )}
 
-          {item.metadata?.aiSummary && (
+          {currentItem.metadata?.aiSummary && (
             <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '6px', borderLeft: '3px solid #60a5fa', fontSize: '11px', color: '#cbd5e1' }}>
-              <strong style={{ color: '#93c5fd' }}>AI Summary:</strong> {item.metadata.aiSummary}
+              <strong style={{ color: '#93c5fd' }}>AI Summary:</strong> {currentItem.metadata.aiSummary}
             </div>
           )}
 
-          {item.tags && item.tags.length > 0 && (
+          {currentItem.tags && currentItem.tags.length > 0 && (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Tags:</span>
-              {item.tags.map((tag, idx) => (
+              {currentItem.tags.map((tag, idx) => (
                 <span key={idx} style={{
                   fontSize: '10px',
                   fontWeight: 600,
