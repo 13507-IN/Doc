@@ -52,10 +52,40 @@ async function transcribeWithCloudflareVision(imageBuffer, mimeType = 'image/jpe
   ].join(' ');
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35000);
+  const timeout = setTimeout(() => controller.abort(), 60000);
 
   try {
-    // 1. Try Chat Completions endpoint (supports base64 image_url)
+    // 1. Primary: Cloudflare AI Run endpoint (native byte array support for Llama 3.2 Vision)
+    const runUrl = gateway
+      ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/workers-ai/${model}`
+      : `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+
+    const runResponse = await fetch(runUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: promptText,
+        image: Array.from(new Uint8Array(optimized))
+      }),
+      signal: controller.signal
+    });
+
+    if (runResponse.ok) {
+      const runPayload = await runResponse.json();
+      const resultText = runPayload?.result?.response || runPayload?.result?.description || runPayload?.response;
+      if (typeof resultText === 'string' && resultText.trim()) {
+        return {
+          text: resultText.trim(),
+          provider: 'cloudflare-workers-ai',
+          model
+        };
+      }
+    }
+
+    // 2. Secondary: Chat Completions endpoint
     const baseUrl = gateway
       ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/workers-ai/v1/chat/completions`
       : `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`;
@@ -95,38 +125,8 @@ async function transcribeWithCloudflareVision(imageBuffer, mimeType = 'image/jpe
       }
     }
 
-    // 2. Fallback to Cloudflare AI Run endpoint
-    const runUrl = gateway
-      ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/workers-ai/${model}`
-      : `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-
-    const runResponse = await fetch(runUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        prompt: promptText,
-        image: Array.from(new Uint8Array(optimized))
-      }),
-      signal: controller.signal
-    });
-
-    if (runResponse.ok) {
-      const runPayload = await runResponse.json();
-      const resultText = runPayload?.result?.response || runPayload?.result?.description || runPayload?.response;
-      if (typeof resultText === 'string' && resultText.trim()) {
-        return {
-          text: resultText.trim(),
-          provider: 'cloudflare-workers-ai',
-          model
-        };
-      }
-    }
-
-    const errBody = await response.text().catch(() => '');
-    throw new Error(`Cloudflare Workers AI returned status ${response.status}: ${errBody.slice(0, 200)}`);
+    const errBody = await runResponse.text().catch(() => '');
+    throw new Error(`Cloudflare Workers AI returned status ${runResponse.status}: ${errBody.slice(0, 200)}`);
   } finally {
     clearTimeout(timeout);
   }
