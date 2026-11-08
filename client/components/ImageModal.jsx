@@ -5,6 +5,8 @@ import ClickableText from './ClickableText';
 import { extractUrlsFromText, getWebsiteUrlForItem, ensureAbsoluteUrl } from '../utils/urlHelper';
 import usePrivateMediaUrl from '../utils/usePrivateMediaUrl';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
 export default function ImageModal({ item, onClose, onItemUpdated, token }) {
   const [copied, setCopied] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -43,15 +45,15 @@ export default function ImageModal({ item, onClose, onItemUpdated, token }) {
     setTranscribing(true);
     setTranscribeError('');
     try {
-      const activeToken = token || localStorage.getItem('token');
-      const res = await fetch(`/api/items/${item._id}/transcribe-vision`, {
+      const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
+      const res = await fetch(`${API_BASE}/items/${item._id}/transcribe-vision`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${activeToken}`,
           'Content-Type': 'application/json'
         }
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Vision transcription failed');
       }

@@ -783,7 +783,7 @@ exports.createScreenshot = async (req, res) => {
       message: 'Screenshot saved. Text is being read in the background.'
     });
 
-    enqueueItemOcr(item._id, req.file.buffer);
+    enqueueItemOcr(item._id, req.file.buffer, { mimeType: req.file?.mimetype || 'image/jpeg' });
   } catch (error) {
     if (stored && !itemCreated) {
       await discardStoredMedia({ ...stored, cloudinaryResourceType: 'image' });

@@ -243,19 +243,36 @@ async function initWorker() {
   }
 }
 
+const COMMON_ENGLISH_WORDS = new Set([
+  'the', 'of', 'and', 'to', 'a', 'in', 'is', 'it', 'you', 'that', 'he', 'was', 'for', 'on', 'are', 'as', 'with', 'his', 'they', 'i', 'at', 'be', 'this', 'have', 'from', 'or', 'one', 'had', 'by', 'word', 'but', 'not', 'what', 'all', 'were', 'we', 'when', 'your', 'can', 'said', 'there', 'use', 'an', 'each', 'which', 'she', 'do', 'how', 'their', 'if', 'will', 'up', 'other', 'about', 'out', 'many', 'then', 'them', 'these', 'so', 'some', 'her', 'would', 'make', 'like', 'him', 'into', 'time', 'has', 'look', 'two', 'more', 'write', 'go', 'see', 'number', 'no', 'way', 'could', 'people', 'my', 'than', 'first', 'water', 'been', 'call', 'who', 'oil', 'its', 'now', 'find', 'long', 'down', 'day', 'did', 'get', 'come', 'made', 'may', 'part', 'process', 'random', 'system', 'function', 'state', 'sample', 'value', 'order', 'second', 'third', 'strict', 'sense', 'mean', 'variance', 'properties', 'change', 'shift', 'result', 'results', 'stationary', 'physical', 'meaning', 'translation', 'probability', 'several', 'types', 'code', 'import', 'const', 'return', 'function', 'class', 'export', 'default', 'true', 'false', 'null', 'undefined', 'new', 'async', 'await', 'item', 'items', 'user', 'data', 'text', 'error', 'name', 'title', 'view', 'page', 'home', 'app', 'link', 'click', 'open', 'save', 'file', 'image', 'path', 'test', 'type', 'list', 'create', 'update', 'delete', 'select', 'where', 'from', 'table', 'database', 'status', 'token', 'auth', 'login', 'signup', 'email', 'password', 'setting', 'settings', 'search', 'filter', 'dashboard', 'report', 'analytics', 'source', 'header', 'footer', 'button', 'input', 'form', 'modal', 'card', 'box', 'panel', 'container', 'wrapper', 'style', 'color', 'background', 'border', 'width', 'height', 'padding', 'margin', 'display', 'flex', 'grid', 'font', 'size', 'weight', 'bold', 'dark', 'light', 'mode'
+]);
+
 function shouldTriggerVisionHtr({ text, confidence, width, height }) {
-  // 1. Tesseract confidence below threshold (e.g. < 60%)
-  if (confidence > 0 && confidence < 60) return true;
+  // 1. Tesseract confidence below threshold or absent (handwriting / cursive typically scores < 65%)
+  if (!confidence || confidence < 65) return true;
 
-  // 2. Large canvas / visual area but very sparse text (< 25 chars)
-  if (width >= 400 && height >= 300 && text.length < 25) return true;
+  // 2. Large canvas / visual area but very sparse text (< 35 chars)
+  if (width >= 300 && height >= 200 && text.length < 35) return true;
 
-  // 3. High noise / low valid word ratio (e.g. whiteboard lecture symbols & cursive)
-  const tokens = text.split(/\s+/).filter(Boolean);
-  if (tokens.length >= 10) {
-    const validWords = tokens.filter((t) => /^[a-zA-Z0-9]{3,}$/.test(t.replace(/[^a-zA-Z0-9]/g, '')));
-    const validRatio = validWords.length / tokens.length;
-    if (validRatio < 0.35 && confidence < 75) return true;
+  // 3. Token-level analysis for handwriting & garbled cursive non-words
+  const rawTokens = text.split(/\s+/).filter(Boolean);
+  if (rawTokens.length >= 8) {
+    const alphaTokens = rawTokens
+      .map((t) => t.toLowerCase().replace(/[^a-z]/g, ''))
+      .filter((t) => t.length >= 2);
+
+    if (alphaTokens.length >= 6) {
+      const recognized = alphaTokens.filter((t) => COMMON_ENGLISH_WORDS.has(t)).length;
+      const recognizedRatio = recognized / alphaTokens.length;
+
+      // Low dictionary word ratio (< 35%) with confidence < 80% indicates garbled cursive
+      if (recognizedRatio < 0.35 && confidence < 80) return true;
+    }
+
+    // High ratio of isolated 1-2 char fragments (typical of fragmented cursive strokes)
+    const shortTokens = rawTokens.filter((t) => t.replace(/[^a-zA-Z0-9]/g, '').length <= 2);
+    const shortRatio = shortTokens.length / rawTokens.length;
+    if (shortRatio > 0.40 && confidence < 80) return true;
   }
 
   return false;

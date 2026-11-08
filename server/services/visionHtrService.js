@@ -10,6 +10,14 @@ function isVisionHtrAvailable(env = process.env) {
   return hasCf || hasGemini;
 }
 
+function cleanVisionTranscript(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let cleaned = rawText.trim();
+  cleaned = cleaned.replace(/^The image shows[\s\S]*?(?:Here is the transcribed (?:content|text)|Here is the transcription|transcription:)\s*[:\n]*/i, '');
+  cleaned = cleaned.replace(/\n+\*\*Note:\*\*[\s\S]*$/i, '');
+  return cleaned.trim() || rawText.trim();
+}
+
 // Ensure the image buffer is compressed and within optimal resolution for Vision models
 async function optimizeImageForVision(buffer) {
   try {
@@ -204,7 +212,11 @@ async function transcribeImageWithVision(imageBuffer, mimeType = 'image/jpeg', e
 
   if (hasCf) {
     try {
-      return await transcribeWithCloudflareVision(imageBuffer, mimeType, env);
+      const res = await transcribeWithCloudflareVision(imageBuffer, mimeType, env);
+      if (res?.text) {
+        res.text = cleanVisionTranscript(res.text);
+      }
+      return res;
     } catch (err) {
       cfError = err;
       console.warn('[Vision HTR] Cloudflare Workers AI attempt failed:', err.message);
@@ -213,7 +225,11 @@ async function transcribeImageWithVision(imageBuffer, mimeType = 'image/jpeg', e
 
   if (hasGemini) {
     try {
-      return await transcribeWithGeminiVision(imageBuffer, mimeType, env);
+      const gRes = await transcribeWithGeminiVision(imageBuffer, mimeType, env);
+      if (gRes?.text) {
+        gRes.text = cleanVisionTranscript(gRes.text);
+      }
+      return gRes;
     } catch (geminiErr) {
       console.warn('[Vision HTR] Gemini Vision attempt failed:', geminiErr.message);
       if (cfError) {
