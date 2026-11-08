@@ -29,10 +29,15 @@ async function storeImage(req) {
   let cloudinaryFormat = '';
   let localFilename = null;
   let storage = 'local';
+  let storageWarning = '';
 
   if (cloudinaryConfigured) {
     try {
       const result = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error('Cloudinary upload timed out after 8 seconds'));
+        }, 8000);
+
         const stream = cloudinary.uploader.upload_stream(
           {
             folder: `holder/${req.user.id}`,
@@ -41,8 +46,16 @@ async function storeImage(req) {
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
             transformation: [{ width: 2400, height: 2400, crop: 'limit' }]
           },
-          (error, uploadResult) => (error ? reject(error) : resolve(uploadResult))
+          (error, uploadResult) => {
+            clearTimeout(timer);
+            if (error) reject(error);
+            else resolve(uploadResult);
+          }
         );
+        stream.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
         stream.end(req.file.buffer);
       });
       cloudinaryPublicId = result.public_id;
@@ -50,6 +63,13 @@ async function storeImage(req) {
       storage = 'cloudinary';
     } catch (error) {
       console.error('[Cloudinary] Image upload failed; falling back to local storage:', error.message);
+      if (error.message?.includes('missing permissions') || error.message?.includes('actions=["create"]')) {
+        storageWarning = 'Cloudinary API key is missing "create" permissions. Saved on server disk.';
+      } else if (error.message?.includes('timed out')) {
+        storageWarning = 'Cloudinary upload timed out. Saved on server disk.';
+      } else {
+        storageWarning = 'Cloudinary upload failed. Saved on server disk.';
+      }
     }
   }
 
@@ -65,9 +85,9 @@ async function storeImage(req) {
     cloudinaryFormat,
     localFilename,
     storage,
-    storageWarning: storage === 'local'
+    storageWarning: storageWarning || (storage === 'local'
       ? 'Cloudinary is unavailable, so this image is stored on the server disk.'
-      : ''
+      : '')
   };
 }
 
@@ -521,6 +541,13 @@ exports.createItem = async (req, res) => {
     invalidateAssistantCache(userId);
     const populatedItem = await Item.findById(item._id).populate('folderId', 'name icon color');
 
+    // If item was created from an uploaded image, enqueue background OCR for deep transcription (including handwriting Vision HTR)
+    if (pendingUpload && pendingUpload.cloudinaryResourceType === 'image') {
+      getItemImageBuffer(item)
+        .then((buf) => enqueueItemOcr(item._id, buf, { mimeType: pendingUpload.mimeType || 'image/jpeg' }))
+        .catch((err) => console.warn('[OCR] Background OCR enqueue deferred:', err.message));
+    }
+
     res.status(201).json({ success: true, item: serializeItem(populatedItem) });
   } catch (error) {
     if (consumedUpload) await discardStoredMedia(consumedUpload);
@@ -704,17 +731,19 @@ exports.uploadImage = async (req, res) => {
     }
 
     const shouldOcr = req.query.ocr === 'true';
-    const [storedImage, ocrText] = await Promise.all([
+    const [storedImage, ocrResult] = await Promise.all([
       storeImage(req),
       shouldOcr
-        ? recognize(req.file.buffer).catch((ocrErr) => {
-            console.error('[OCR] Fast OCR processing failed:', ocrErr.message);
+        ? recognize(req.file.buffer, { skipFallback: true }).catch((ocrErr) => {
+            console.error('[OCR] Fast staging OCR processing failed:', ocrErr.message);
             return '';
           })
         : Promise.resolve('')
     ]);
     stored = storedImage;
     const pending = await createPendingUpload(req.user.id, req.file, storedImage, 'image');
+
+    const ocrText = String(ocrResult?.text || ocrResult || '').trim();
 
     res.json({
       success: true,
@@ -824,6 +853,7 @@ exports.uploadPdf = async (req, res) => {
     if (cloudinaryConfigured) {
       try {
         const uploadResult = await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Cloudinary PDF upload timed out after 8 seconds')), 8000);
           const stream = cloudinary.uploader.upload_stream(
             {
               folder: `holder/${req.user.id}/pdfs`,
@@ -831,8 +861,16 @@ exports.uploadPdf = async (req, res) => {
               type: 'authenticated',
               public_id: `${cleanBaseName}-${uniqueSuffix}.pdf`
             },
-            (error, result) => (error ? reject(error) : resolve(result))
+            (error, result) => {
+              clearTimeout(timer);
+              if (error) reject(error);
+              else resolve(result);
+            }
           );
+          stream.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
           stream.end(req.file.buffer);
         });
         if (uploadResult && uploadResult.public_id) {

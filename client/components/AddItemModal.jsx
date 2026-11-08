@@ -99,18 +99,19 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
   const lastExtractedUrlRef = useRef('');
 
   const isEditing = Boolean(editingItem);
+  const activeToken = token || (typeof window !== 'undefined' ? (localStorage.getItem('holder_token') || localStorage.getItem('token')) : null);
   const privateImagePreview = usePrivateMediaUrl(
     stagedUpload?.type === 'image'
       ? stagedUpload.mediaUrl
       : (isEditing && activeTab === 'image' ? editingItem?.mediaUrl : null),
-    token
+    activeToken
   );
 
   const releaseStagedUpload = async (uploadId) => {
-    if (!uploadId || !token) return;
+    if (!uploadId || !activeToken) return;
     try {
       await axios.delete(`${API_BASE}/uploads/${uploadId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${activeToken}` }
       });
     } catch (error) {
       if (error.response?.status !== 404) {
@@ -315,8 +316,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       const res = await axios.post(`${API_BASE}/items/upload-image?ocr=true`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${activeToken}`
+        },
+        timeout: 30000
       });
 
       if (res.data.success) {
@@ -405,8 +407,9 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
       const res = await axios.post(`${API_BASE}/items/upload-pdf`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${activeToken}`
+        },
+        timeout: 30000
       });
 
       if (res.data.success) {
@@ -480,10 +483,12 @@ export default function AddItemModal({ isOpen, onClose, folders = [], onItemAdde
 
       const request = isEditing
         ? axios.put(`${API_BASE}/items/${editingItem._id}`, payload, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${activeToken}` },
+            timeout: 30000
           })
         : axios.post(`${API_BASE}/items`, payload, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${activeToken}` },
+            timeout: 30000
           });
       const res = await request;
 
